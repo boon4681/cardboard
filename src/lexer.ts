@@ -26,12 +26,13 @@ export class Token {
 
 export class Input {
     index: number = 0
-    line: number = 0
+    line: number = 1
     column: number = 0
-
     size: number
 
-    constructor(public input: string, public config: Config) {
+    private last_index: number = 0
+
+    constructor(public input: string, public config?: Config) {
         if (input.length > 0) {
             this.size = input.length - 1
         } else {
@@ -42,10 +43,10 @@ export class Input {
     private validate_move(step: number) {
         const value = this.index + step
         if (value < 0) {
-            throw new Error(`Cursor must be more than one. [0,${this.size}] ${value}`)
+            throw new Error(`index must be more than one. [0,${this.size}] ${value}`)
         }
         if (value > this.size) {
-            throw new Error(`Cursor must be lower than input size. [0,${this.size}] ${value}`)
+            throw new Error(`index must be lower than input size. [0,${this.size}] ${value}`)
         }
         return true
     }
@@ -61,9 +62,24 @@ export class Input {
         return value
     }
 
-    private update_line() {
-        this.line++
-        this.column = 0
+    private update_line(step: number) {
+        const m = /\n/g.exec(this.pan(step))
+        this.column += step
+        if (m) {
+            if (step >= 0) {
+                this.line += m.length
+            } else {
+                this.line -= m.length
+            }
+            this.column = 0
+        }
+    }
+
+    make_havoc() {
+        if (this.last_index === this.index && !this.eof()) {
+            throw new Error("A havoc was happened somewhere in cardboard")
+        }
+        this.last_index = this.index
     }
 
     get(index: number, clamp?: boolean) {
@@ -81,12 +97,16 @@ export class Input {
 
     seek(step: number, clamp?: boolean) {
         if (clamp) {
-            if (this.eol()) this.update_line()
-            return this.input.slice(this.index, this.index = this.clamp(step))
+            this.last_index = this.index + 0
+            const result = this.input.slice(this.index, this.index = this.clamp(step))
+            this.update_line(step)
+            return result
         }
         this.validate_move(step)
-        if (this.eol()) this.update_line()
-        return this.input.slice(this.index, this.index += step)
+        this.last_index = this.index + 0
+        const result = this.input.slice(this.index, this.index += step)
+        this.update_line(step)
+        return result
     }
 
     pan(range: number | Range, clamp?: boolean) {
@@ -104,10 +124,10 @@ export class Input {
         if (clamp) {
             return this.input.slice(this.clamp(value[0]), this.clamp(value[1]))
         }
-        value[0] += this.index
-        value[1] += this.index
         this.validate_move(value[0])
         this.validate_move(value[1])
+        value[0] += this.index -1
+        value[1] += this.index -1
         return this.input.slice(value[0], value[1])
     }
 
@@ -124,7 +144,7 @@ export class Input {
     }
 
     eol() {
-        return this.code(0) === '\n'.charCodeAt(0)
+        return this.code(0) === '\n'.charCodeAt(0) || this.eof()
     }
 
     skip() {
@@ -147,15 +167,40 @@ export class Input {
 export class Wrapper {
 
     stack: Reader[] = []
+    wrapper_stack: Wrapper[] = []
     parent!: Lexer
 
-    constructor(private source: Input, public name: string) { }
+    constructor(public source: Input, public name: string) { }
 
-    wrap(reader: Reader) {
-        reader.parent = this
-        reader.source = this.source
-        reader.compile()
-        this.stack.push(reader)
+    test() {
+        for (const node of this.stack) {
+            if (node.test() && !node._fragment) {
+                if (node.options.mode == "push") {
+                    if (node.options.wrapper === 'self') {
+                        this.wrapper_stack.unshift(this)
+                    } else {
+                        node.options.wrapper.parent = this.parent
+                        this.wrapper_stack.unshift(node.options.wrapper)
+                    }
+                }
+                if (node.options.mode == "pop") {
+                    this.wrapper_stack.shift()
+                }
+                return node
+            }
+        }
+        return undefined
+    }
+
+    cwrap(callback: (wrap: (reader: Reader) => void) => void) {
+        const self = this
+        function wrap(reader: Reader) {
+            reader.parent = self
+            reader.source = self.source
+            reader.compile()
+            self.stack.push(reader)
+        }
+        callback(wrap)
     }
 }
 
@@ -195,15 +240,15 @@ export class Reader {
 
     compile() {
         let reg = this.regex.source
-        if (/\\f\{([A-Z0-9]+)\}/.test(reg)) {
-            for (const i of reg.matchAll(/\\f\{([A-Z0-9]+)\}/g)) {
+        if (/\\f\{([A-Za-z0-9]+)\}/g.test(reg)) {
+            for (const i of reg.matchAll(/\\f\{([A-Za-z0-9]+)\}/g)) {
                 if (i[1] == 'Any') {
-                    reg = reg.replace(/\\f\{([A-Z0-9]+)\}/, '\[\\s\\S\]')
+                    reg = reg.replace(/\\f\{([A-Za-z0-9]+)\}/, '\[\\s\\S\]')
                     continue
                 }
                 const m = this.parent.stack.filter(a => a.name == i[1] && a._fragment)
                 if (m.length > 0) {
-                    reg = reg.replace(/\\f\{([A-Z0-9]+)\}/, m[0].regex.source)
+                    reg = reg.replace(/\\f\{([A-Za-z0-9]+)\}/, m[0].regex.source)
                 } else {
                     throw new Error(`Not Found TokenReader named ${i[1]}\n${JSON.stringify({
                         name: this.name,
@@ -231,7 +276,7 @@ export class Reader {
         const start_col = this.source.column + 0
         if (match) {
             const start = this.source.index
-            const end = start + match[0].length - 0
+            const end = start + match[0].length + 0
             const value = this.source.seek(match[0].length)
             return new Token(value, {
                 start: {
@@ -249,17 +294,86 @@ export class Reader {
     }
 }
 
-export type TreeNode = {
-    type: "literal" | "argument" | "root"
+export class LiteralReader extends Reader {
+    constructor() {
+        super({ name: 'literal', regex: /./ })
+    }
+    set_token(token: string) {
+        this.regex = new RegExp(token)
+    }
+}
+
+export type CommandNode = {
+    type: "literal" | "root"
     parser?: string
-    properties?: { [key: string]: any },
-    redirect?: string[],
+    properties?: { [key: string]: any }
+    redirect?: string[]
     executable?: boolean
     children?: {
-        [key: string]: TreeNode
+        [key: string]: CommandNode
+    }
+} | {
+    type: "argument"
+    parser: string
+    properties: { [key: string]: any }
+    redirect?: string[]
+    executable?: boolean
+    children?: {
+        [key: string]: CommandNode
+    }
+}
+
+export type TreeNode = {
+    name: string
+    type: "literal" | "argument" | "root"
+    parser?: string
+    properties?: { [key: string]: any }
+    redirect?: string[]
+    executable?: boolean
+    children?: {
+        [key: string]: CommandNode
+    }
+}
+
+export class Command {
+    constructor(public root: CommandNode) { }
+
+    unwrap(node: CommandNode): TreeNode[] | null {
+        if (node.children) {
+            const nodes = node.children
+            return Object.keys(nodes).map(a => {
+                return { name: a, ...nodes[a] }
+            })
+        }
+        return null
     }
 }
 
 export class Lexer {
-    constructor(public source: Input) { }
+    constructor(public source: Input, public commands: CommandNode) { }
+
+    read() {
+        const { unwrap } = new Command(this.commands)
+        let tree = unwrap(this.commands)
+        const literal_reader = new LiteralReader()
+        literal_reader.source = this.source
+        while (tree) {
+            if (tree) {
+                for (const node of tree) {
+                    if (node.type === 'literal') {
+                        literal_reader.set_token(node.name)
+                        if (literal_reader.test()) {
+                            console.log(literal_reader.read())
+                            tree = unwrap(node as any)
+                            this.source.skip_until_not(" ")
+                        }
+                    }
+                    if (node.type === 'argument') {
+                        console.log(node.parser)
+                    }
+                }
+                this.source.make_havoc()
+            }
+        }
+    }
 }

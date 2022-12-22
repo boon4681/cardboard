@@ -1,0 +1,50 @@
+#lexer cardboard:0.0.1
+#v[1.19]
+
+lexer String {
+    lexer Quoted {
+        text = not("\\|\'")+
+        escape = '\\\\[tbrn\'\"\\\\]'
+        close = "'" -> pop
+    }
+
+    lexer DoubleQuoted {
+        text = not("\\|\"")+
+        escape = '\\\\[tbrn\'\"\\\\]'
+        double_quoted_close = '"' -> pop
+    }
+
+    @if("'"){
+        open = "'" -> push(Quoted)
+    }
+    double_quoted_open = "'" -> push(Quoted)
+}
+
+lexer SelectorOptions {
+    lexer name {
+        key = "name"
+        expr = "(?:\\s*)(=(?:\\s*)(\\!)?)"
+        value = String
+    }
+
+    whitespace -> ignore
+    data = name
+    whitespace -> ignore
+}
+
+lexer EntitySelector {
+    name = "minecraft:entity"
+    
+    @if("@"){
+        target = "@[praes]"
+
+        whitespace -> ignore
+
+        @if("["){
+            LSQUARE = "["
+            RSQUARE = "]"
+        }
+    }
+ 
+    target = "[A-Za-z]" @relative.block.jo
+}
