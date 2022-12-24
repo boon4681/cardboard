@@ -1,6 +1,10 @@
 #lexer cardboard:0.0.1
 #v[1.19]
 
+lexer hi{
+
+}
+
 lexer String {
     lexer Quoted {
         text = not("\\|\'")+

@@ -1,3 +1,4 @@
+import chalk from "chalk"
 
 export type Location = {
     line: number
@@ -7,19 +8,22 @@ export type Location = {
 export type Range = [number, number]
 
 export type Span = {
-    start: Location,
-    end: Location,
+    start: Location
+    end: Location
     range: Range
+    size: number
 }
 
 export interface Config { }
 
 export class Token {
-    value: string
+    name: string
+    raw: string
     span: Span
 
-    constructor(value: string, span: Span) {
-        this.value = value
+    constructor(name: string, raw: string, span: Span) {
+        this.name = name
+        this.raw = raw
         this.span = span
     }
 }
@@ -30,14 +34,12 @@ export class Input {
     column: number = 0
     size: number
 
-    private last_index: number = 0
+    line_index: number = 0
 
-    constructor(public input: string, public config?: Config) {
-        if (input.length > 0) {
-            this.size = input.length - 1
-        } else {
-            this.size = input.length
-        }
+    last_index: number = 0
+
+    constructor(public name: string, public input: string, public config?: Config) {
+        this.size = input.length
     }
 
     private validate_move(step: number) {
@@ -54,16 +56,16 @@ export class Input {
     private clamp(step: number) {
         const value = this.index + step
         if (value < 0) {
-            return -value
+            return 0
         }
         if (value > this.size) {
-            return value - this.size
+            return this.size
         }
         return value
     }
 
     private update_line(step: number) {
-        const m = /\n/g.exec(this.pan(step))
+        const m = /\n/g.exec(this.pan(step, true))
         this.column += step
         if (m) {
             if (step >= 0) {
@@ -71,13 +73,23 @@ export class Input {
             } else {
                 this.line -= m.length
             }
+            this.line_index = this.index
             this.column = 0
         }
     }
 
-    make_havoc() {
-        if (this.last_index === this.index && !this.eof()) {
-            throw new Error("A havoc was happened somewhere in cardboard")
+    wreak_havoc(i?: { result?: boolean, err?: Error }) {
+        if (i) {
+            if (this.last_index === this.index && !this.eof() && !i.result) {
+                if (i && i.err) {
+                    throw i.err
+                }
+                throw new Error("A havoc was happened somewhere in cardboard")
+            }
+        } else {
+            if (this.last_index === this.index && !this.eof()) {
+                throw new Error("A havoc was happened somewhere in cardboard")
+            }
         }
         this.last_index = this.index
     }
@@ -126,8 +138,8 @@ export class Input {
         }
         this.validate_move(value[0])
         this.validate_move(value[1])
-        value[0] += this.index -1
-        value[1] += this.index -1
+        value[0] += this.index - 1
+        value[1] += this.index - 1
         return this.input.slice(value[0], value[1])
     }
 
@@ -164,41 +176,135 @@ export class Input {
     }
 }
 
+export class DepthDebug {
+    depth: number = 0
+    wrapper_stack: Wrapper[] = []
+    wrapper_queue: Wrapper[] = []
+    log(...args: any) {
+        console.log(new Array(this.depth).fill('  ').join('') + args[0], ...[...args].slice(1))
+    }
+    push() {
+        this.depth += 1
+    }
+    pop() {
+        this.depth -= 1
+    }
+}
+
 export class Wrapper {
 
     stack: Reader[] = []
     wrapper_stack: Wrapper[] = []
-    parent!: Lexer
+    wrapper_queue: Wrapper[] = []
+    parent!: Wrapper
 
-    constructor(public source: Input, public name: string) { }
+    constructor(public source: Input, public name: string, public depthDebug: DepthDebug) { }
 
-    test() {
-        for (const node of this.stack) {
-            if (node.test() && !node._fragment) {
-                if (node.options.mode == "push") {
-                    if (node.options.wrapper === 'self') {
-                        this.wrapper_stack.unshift(this)
-                    } else {
-                        node.options.wrapper.parent = this.parent
-                        this.wrapper_stack.unshift(node.options.wrapper)
-                    }
-                }
-                if (node.options.mode == "pop") {
-                    this.wrapper_stack.shift()
-                }
-                return node
-            }
-        }
-        return undefined
+    add_wrapper(wrapper: Wrapper) {
+        wrapper.parent = this
+        wrapper.depthDebug = this.depthDebug
+        wrapper.source = this.source
+        this.wrapper_stack.push(wrapper)
+        return this
     }
 
-    cwrap(callback: (wrap: (reader: Reader) => void) => void) {
+    read(): Token[] | void {
+        const tokens: Token[] = []
+        this.depthDebug.log(`@start --------> ${this.name}`)
+        this.depthDebug.push()
+        for (const lexer of this.stack) {
+            this.depthDebug.log(`@stack ${this.name}:${lexer.name}`, lexer.test())
+            if (lexer.test()) {
+                if (!lexer.options.fragment) {
+                    const result = lexer.read()
+                    if (!lexer.options.ignored) {
+                        if (lexer.options.mode == "push") {
+                            if (lexer.options.wrapper === 'self') {
+                                this.wrapper_queue.unshift(this)
+                            } else {
+                                lexer.options.wrapper.parent = this
+                                lexer.options.wrapper.depthDebug = this.depthDebug
+                                this.wrapper_queue.unshift(lexer.options.wrapper)
+                            }
+                        }
+                        if (lexer.options.mode == "pop") {
+                            this.depthDebug.log(`@pop ${this.name}:${lexer.name}`)
+                            this.parent.wrapper_queue.shift()
+                        }
+                        tokens.push(result)
+                    }
+                }
+            } else {
+                this.source.wreak_havoc()
+            }
+        }
+        this.depthDebug.log('@list', this.name, this.wrapper_stack.map(a => a.name))
+        for (const wrapper of this.wrapper_stack) {
+            const test = wrapper.test()
+            this.depthDebug.log(`test from ${this.name}:${wrapper.name}`, test)
+            if (test) {
+                const result = wrapper.read()
+                // this.depthDebug.log(this.name, 'result', result)
+                if (result) {
+                    tokens.push(...result)
+                }
+            }
+        }
+        while (this.wrapper_queue.length > 0) {
+            const wrapper = this.wrapper_queue[0]
+            this.depthDebug.log(chalk.green(wrapper.name))
+            const result = wrapper.read()
+            if (result && result.length > 0) {
+                this.depthDebug.log(`${this.name}:${wrapper.name}`, result.length)
+                tokens.push(...result)
+            }
+            else {
+                throw new Error('No viable alternative')
+            }
+            // console.log(this.source.pan(10,true))
+        }
+        this.depthDebug.pop()
+        this.depthDebug.log(`@end --------> ${this.name}`)
+        return tokens
+    }
+
+    test() {
+        const index = this.source.index + 0
+        const last_index = this.source.last_index + 0
+        if (this.stack.length == 0) return false
+        for (const lexer of this.stack) {
+            if (
+                lexer.test()
+            ) {
+                if (!lexer.options.fragment) {
+                    lexer.read()
+                }
+            } else {
+                this.source.index = index
+                this.source.last_index = last_index
+                return false
+            }
+        }
+        this.source.index = index
+        this.source.last_index = last_index
+        return true
+    }
+
+    cwrap(callback: (wrap: (reader: Reader | Wrapper) => void) => void) {
         const self = this
-        function wrap(reader: Reader) {
-            reader.parent = self
-            reader.source = self.source
-            reader.compile()
-            self.stack.push(reader)
+        function wrap(reader: Reader | Wrapper) {
+            if (reader instanceof Reader) {
+                reader.parent = self
+                reader.source = self.source
+                reader.compile()
+                self.stack.push(reader)
+            } else {
+                console.log(`add ${reader.name} to ${self.name}`)
+                reader.parent = self
+                reader.depthDebug = self.depthDebug
+                reader.source = self.source
+                self.wrapper_stack.push(reader)
+            }
         }
         callback(wrap)
     }
@@ -206,14 +312,17 @@ export class Wrapper {
 
 export type ReaderOptions = {
     mode: "pop"
-    fragment?: boolean
+    fragment?: boolean,
+    ignored?: boolean
 } | {
     mode: "push"
     wrapper: Wrapper | 'self'
-    fragment?: boolean
+    fragment?: boolean,
+    ignored?: boolean
 } | {
     mode: "normal"
-    fragment?: boolean
+    fragment?: boolean,
+    ignored?: boolean
 }
 
 export class Reader {
@@ -222,8 +331,7 @@ export class Reader {
     regex: RegExp
     parent!: Wrapper
     source!: Input
-    _fragment: boolean = false
-    options: ReaderOptions = { mode: 'normal' }
+    options: ReaderOptions = { mode: 'normal', fragment: false, ignored: false }
 
     constructor({ name, regex }: { name: string, regex: RegExp }, options?: ReaderOptions) {
         this.name = name
@@ -234,8 +342,21 @@ export class Reader {
     }
 
     fragment() {
-        this._fragment = true
+        this.options.fragment = true
         return this
+    }
+
+    ignore() {
+        this.options.ignored = true
+        return this
+    }
+
+    clone(setting?: { name?: string }, options?: ReaderOptions) {
+        let _ = Object.assign(this, setting ? setting : {})
+        if (options) {
+            _.options = options
+        }
+        return _
     }
 
     compile() {
@@ -246,14 +367,14 @@ export class Reader {
                     reg = reg.replace(/\\f\{([A-Za-z0-9]+)\}/, '\[\\s\\S\]')
                     continue
                 }
-                const m = this.parent.stack.filter(a => a.name == i[1] && a._fragment)
+                const m = this.parent.stack.filter(a => a.name == i[1] && a.options.fragment)
                 if (m.length > 0) {
                     reg = reg.replace(/\\f\{([A-Za-z0-9]+)\}/, m[0].regex.source)
                 } else {
                     throw new Error(`Not Found TokenReader named ${i[1]}\n${JSON.stringify({
                         name: this.name,
                         regex: this.regex,
-                        fragment: this._fragment
+                        fragment: this.options.fragment
                     }, null, 4)}`)
                 }
             }
@@ -278,7 +399,7 @@ export class Reader {
             const start = this.source.index
             const end = start + match[0].length + 0
             const value = this.source.seek(match[0].length)
-            return new Token(value, {
+            return new Token(this.name, value, {
                 start: {
                     line: start_line,
                     column: start_col
@@ -287,10 +408,11 @@ export class Reader {
                     line: this.source.line,
                     column: this.source.column
                 },
-                range: [start, end]
+                range: [start, end],
+                size: value.length
             })
         }
-        throw new Error(`[${this.source.index}]\n${this.source.pan(-15)} <- missing ${this.regex}`)
+        throw new Error(`${this.source.name}:${start_line}:${start_col}\n${this.source.pan([-100, 0], true)} <- missing ${this.regex}`)
     }
 }
 
@@ -372,7 +494,7 @@ export class Lexer {
                         console.log(node.parser)
                     }
                 }
-                this.source.make_havoc()
+                this.source.wreak_havoc()
             }
         }
     }
