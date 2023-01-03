@@ -1,13 +1,13 @@
 #lexer cardboard:0.0.1
 #v[1.19]
 
-lexer hi {
-    hi = 'hi'
-}
 lexer jo{
+    hi = 'hi\""' "yes" hello
+    hello = "hello"
 }
 
 lexer ko{
     lexer ko{
+        jo = "" @registries.hi
     }
 }

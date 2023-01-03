@@ -1,6 +1,5 @@
 import chalk from "chalk";
 import { Cardboard } from "./cardboard/lexer";
-import { Command, Input, Lexer, Token, TreeNode } from "./lexer";
 import { load_commands } from "./minecraft/command";
 
 async function main() {

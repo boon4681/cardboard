@@ -7,13 +7,13 @@ lexer hi{
 
 lexer String {
     lexer Quoted {
-        text = not("\\|\'")+
+        text = "[\\\']+"
         escape = '\\\\[tbrn\'\"\\\\]'
         close = "'" -> pop
     }
 
     lexer DoubleQuoted {
-        text = not("\\|\"")+
+        text = "[\\\"]+"
         escape = '\\\\[tbrn\'\"\\\\]'
         double_quoted_close = '"' -> pop
     }
@@ -32,7 +32,7 @@ lexer SelectorOptions {
     }
 
     whitespace -> ignore
-    data = name
+    data = name | hello
     whitespace -> ignore
 }
 
@@ -50,5 +50,5 @@ lexer EntitySelector {
         }
     }
  
-    target = "[A-Za-z]" @relative.block.jo
+    target = "[A-Za-z]" @registries.block.jo
 }

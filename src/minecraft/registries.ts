@@ -1,7 +1,6 @@
 import { readFileSync, writeFileSync } from 'fs'
 import fetch from 'node-fetch'
 import path from 'path'
-import { CommandNode } from '../lexer'
 import { makeNotExistDir, isExist } from '../utils/file'
 
 let cached = ''
@@ -35,5 +34,5 @@ export const load_registries = async (version: string, root: string = './') => {
         const f = readFileSync(f_path, 'utf-8')
         load = JSON.parse(f)
     }
-    return load as CommandNode
+    return load
 }
