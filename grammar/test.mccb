@@ -2,12 +2,12 @@
 #v[1.19]
 
 lexer jo{
-    hi = 'hi\""' "yes" hello
+    hi = 'hi\""' "yes" hello -> normal
     hello = "hello"
 }
 
 lexer ko{
     lexer ko{
-        jo = "" @registries.hi
+        jo = "" @registries.hi -> normal
     }
 }

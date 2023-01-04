@@ -39,8 +39,33 @@ export class Input {
 
     last_index: number = 0
 
+    private stack: { index: number, line: number, column: number, size: number, line_index: number, last_index: number }[] = []
+
     constructor(public name: string, public input: string, public config?: Config) {
         this.size = input.length
+    }
+
+    push() {
+        this.stack.unshift({
+            index: this.index,
+            line: this.line,
+            column: this.column,
+            size: this.size,
+            line_index: this.line_index,
+            last_index: this.last_index
+        })
+    }
+
+    pop(){
+        const state = this.stack.shift()
+        if(state){
+            this.index = state.index
+            this.line = state.line
+            this.column = state.column
+            this.size = state.size
+            this.line_index = state.line_index
+            this.last_index = state.last_index
+        }
     }
 
     private validate_move(step: number) {
@@ -403,8 +428,9 @@ export class Group implements Tokenizer {
     }
 
     test(): boolean {
-        console.log(this.name)
+        console.log('@Group', this.name)
         for (const reader of this.stack) {
+            console.log('@reader.test.group', reader.name, reader.test())
             if (reader.test()) {
                 return true
             }
@@ -553,6 +579,7 @@ export class Wrapper implements Tokenizer {
 
     test(): boolean {
         console.log(this.name)
+        this.source.push()
         if (this.stack.length > 0) {
             let reader: Tokenizer = this.stack[0]
             let i = 0
@@ -560,8 +587,19 @@ export class Wrapper implements Tokenizer {
                 reader = this.stack[i]
                 i++
             }
-            if (reader.test()) return true
+            for (let n = i; n < this.stack.length; n++) {
+                const reader = this.stack[n];
+                console.log('@test.wrapper',reader.name,reader.test())
+                if(reader.test()){
+                    reader.read()
+                }else{
+                    return false
+                }
+            }
+            return true
+            // if (reader.test()) return true
         }
+        this.source.pop()
         return false
     }
 }
@@ -669,33 +707,82 @@ export class CardboardLexer {
             wrap(ReaderOptions)
             ReaderValue.group(wrap => {
                 const ContinuousWrapper = new GroupContinuous('reader.value', source, { mode: 'normal', nullable: true })
-                const Context = new Group('reader.value', source)
+                const ContinuouContext = new Wrapper('reader.value', source)
+                const Context = new Group('reader.value.context', source)
                 Context.group(wrap => {
                     wrap(Strings)
-                    wrap(identifier.clone({ name: 'expr.lexer.name' }))
-                    wrap(new Reader('cardboard.metadata',/\@(?:[_\w][_\w\d]*)(?:\.(?:[_\w][_\w\d]*))*/))
+                    wrap(identifier.clone({ name: 'lexer.name' }))
+                    wrap(new Reader('cardboard.metadata', /\@(?:[_\w][_\w\d]*)(?:\.(?:[_\w][_\w\d]*))*/))
                 })
-                ContinuousWrapper.group(wrap => {
+                ContinuouContext.group(wrap => {
                     wrap(whitespace)
                     wrap(Context)
+                })
+                ContinuousWrapper.group(wrap => {
+                    wrap(ContinuouContext)
                 })
                 wrap(Context)
                 wrap(ContinuousWrapper)
             })
             ReaderOptions.group(wrap => {
-                const Option = new Group('reader.option',source)
-                const ContinuouOption = new GroupContinuous('reader.option',source)
-                const Normal = new Wrapper('reader.options.normal',source)
-                const Pop = new Wrapper('reader.options.pop',source)
-                const Push = new Wrapper('reader.options.push',source)
-                Normal.group(wrap=>{
-                    wrap(new Reader('reader.options.type',/normal/))
+                const Option = new Group('reader.option', source)
+                const Normal = new Wrapper('reader.options.normal', source)
+                const Pop = new Wrapper('reader.options.pop', source)
+                const Push = new Wrapper('reader.options.push', source)
+                Normal.group(wrap => {
+                    const ContinuouOption = new GroupContinuous('reader.option', source, { mode: 'normal', nullable: true })
+                    const Context = new Wrapper('reader.option.context', source)
+                    wrap(new Reader('reader.options.type', /normal/))
+                    wrap(ContinuouOption)
+                    ContinuouOption.group(wrap => {
+                        wrap(Context)
+                    })
+                    Context.group(wrap => {
+                        wrap(Whitespace)
+                        wrap(new Reader(',', /\,/))
+                        wrap(Whitespace)
+                        wrap(new Reader('', /nullable|ignore/))
+                    })
                 })
-                Pop.group(wrap=>{
-                    wrap(new Reader('reader.options.type',/pop/))
+                Push.group(wrap => {
+                    const ContinuouOption = new GroupContinuous('reader.option', source, { mode: 'normal', nullable: true })
+                    const Context = new Wrapper('reader.option.context', source, { mode: 'normal', nullable: true })
+                    wrap(new Reader('reader.options.type', /push/))
+                    wrap(Whitespace)
+                    wrap(new Reader('reader.options.push.parent.open', /\(/))
+                    wrap(Whitespace)
+                    wrap(identifier.clone({ name: 'reader.options.push.reader.name' }))
+                    wrap(Whitespace)
+                    wrap(new Reader('reader.options.push.parent.close', /\)/))
+                    wrap(ContinuouOption)
+                    ContinuouOption.group(wrap => {
+                        wrap(Context)
+                    })
+                    Context.group(wrap => {
+                        wrap(Whitespace)
+                        wrap(new Reader(',', /\,/))
+                        wrap(Whitespace)
+                        wrap(new Reader('', /ignore/))
+                    })
                 })
-                Option.group(wrap=>{
+                Pop.group(wrap => {
+                    const ContinuouOption = new GroupContinuous('reader.option', source, { mode: 'normal', nullable: true })
+                    const Context = new Wrapper('reader.option.context', source)
+                    wrap(new Reader('reader.options.type', /pop/))
+                    wrap(ContinuouOption)
+                    ContinuouOption.group(wrap => {
+                        wrap(Context)
+                    })
+                    Context.group(wrap => {
+                        wrap(Whitespace)
+                        wrap(new Reader(',', /\,/))
+                        wrap(Whitespace)
+                        wrap(new Reader('', /ignore/))
+                    })
+                })
+                Option.group(wrap => {
                     wrap(Normal)
+                    wrap(Push)
                     wrap(Pop)
                 })
                 wrap(new Reader('reader.options', /\-\>/))
@@ -767,8 +854,8 @@ export class Cardboard {
     // }
 
     constructor() {
-        const raw = readFileSync('./grammar/lexer.mccb', 'utf8')
-        const input = new Input('./grammar/lexer.mccb', raw)
+        const raw = readFileSync('./grammar/test.mccb', 'utf8')
+        const input = new Input('./grammar/test.mccb', raw)
         try {
             new CardboardLexer(input).read()
         } catch (error: any) {
