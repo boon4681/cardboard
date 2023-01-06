@@ -6,15 +6,13 @@ export class Wrapper implements Tokenizer {
     name: string
     type: TokenizerType = "wrapper"
     parent!: Wrapper
-    source!: Input
     options: TokenizerOptions = { mode: 'normal', fragment: false, ignored: false, nullable: false }
 
     stack: Tokenizer[] = []
     queue: Tokenizer[] = []
 
-    constructor(name: string, source: Input, options?: TokenizerOptions) {
+    constructor(name: string, options?: TokenizerOptions) {
         this.name = name
-        this.source = source
         if (options) {
             this.options = options
         }
@@ -31,23 +29,38 @@ export class Wrapper implements Tokenizer {
     wrap(callback: (wrap: (tokenizer: Tokenizer) => void) => void) {
         const self = this
         function wrap(tokenizer: Tokenizer) {
-            tokenizer.parent = self
-            tokenizer.source = self.source
             self.stack.push(tokenizer)
         }
         callback(wrap)
         return this
     }
 
-    read(): Token[] {
+    strip(tokenizer: Tokenizer) {
+        let stack: string[] = []
+        let tnz = tokenizer
+        while (tnz.parent && tnz.name != 'lexer') {
+            stack.push(tnz.name)
+            tnz = tnz.parent
+        }
+        return stack.reverse().join(' > ')
+    }
+
+    read(source: Input): Token[] {
         const tokens: Token[] = []
         for (const tokenizer of this.stack) {
             if (tokenizer.fragment()) continue
-            if (tokenizer.test()) {
-                const result = tokenizer.read()
-                console.log('@wrapper',tokenizer.name,tokenizer.type)
+            if (source.stack.length == 0) console.log('@wrapper', this.strip(tokenizer))
+            if (tokenizer.test(source)) {
+                const result = tokenizer.read(source)
+                if (source.stack.length == 0)console.log(result)
                 if (result) {
                     if (tokenizer.type == 'reader' || tokenizer.type == 'wrapper') {
+                        if (!tokenizer.options.ignored) {
+                            tokens.push(...[result].flat(1))
+                        }
+                        if (tokenizer.options.mode == "pop") {
+                            this.parent.queue.shift()
+                        }
                         if (tokenizer.options.mode == "push") {
                             if (tokenizer.options.tokenizer === 'self') {
                                 this.queue.unshift(this)
@@ -55,12 +68,16 @@ export class Wrapper implements Tokenizer {
                                 tokenizer.options.tokenizer.parent = this
                                 this.queue.unshift(tokenizer.options.tokenizer)
                             }
-                        }
-                        if (tokenizer.options.mode == "pop") {
-                            this.parent.queue.shift()
-                        }
-                        if (!tokenizer.options.ignored) {
-                            tokens.push(...[result].flat(1))
+                            while (this.queue.length > 0) {
+                                const tokenizer = this.queue[0]
+                                const result = tokenizer.read(source)
+                                if (result) {
+                                    tokens.push(...[result].flat(1))
+                                }
+                                else {
+                                    throw new Error(`No viable alternative.\n${chalk.red(source.pan(-100, true))}<- is not ${tokenizer.name}`)
+                                }
+                            }
                         }
                     } else if (tokenizer.type == "group") {
                         if (!tokenizer.options.ignored) {
@@ -72,52 +89,55 @@ export class Wrapper implements Tokenizer {
                     }
                 } else {
                     if (!tokenizer.nullable() && tokenizer.type != 'if-wrapper') {
-                        throw new Error(`No viable alternative.\n${chalk.red(this.source.pan(-100, true))}<- is not ${tokenizer.name}`)
+                        throw new Error(`No viable alternative.\n${chalk.red(source.pan(-100, true))}<- is not ${tokenizer.name}`)
                     }
                 }
             } else {
                 if (!tokenizer.nullable() && tokenizer.type != 'if-wrapper') {
-                    throw new Error(`No viable alternative.\n${chalk.red(this.source.pan(-100, true))}<- is not ${tokenizer.name}`)
+                    console.log(tokenizer.name, tokenizer.type)
+                    throw new Error(`No viable alternative.\n${chalk.red(source.pan(-100, true))}<- is not ${tokenizer.name}`)
                 }
-            }
-        }
-        while (this.queue.length > 0) {
-            const reader = this.queue[0]
-            const result = reader.read()
-            if (result) {
-                tokens.push(...[result].flat(1))
-            }
-            else {
-                throw new Error(`No viable alternative.\n${chalk.red(this.source.pan(-100, true))}<- is not ${reader.name}`)
             }
         }
         return tokens
     }
 
-    test(): boolean {
-        this.source.push()
-        console.log("[[[[[[[[[[[",this.name)
+    test(source: Input): boolean {
+        source.push()
         if (this.stack.length > 0) {
             let result = false
+            let pass = 0
             for (let j = 0; j < this.stack.length; j++) {
                 const tokenizer = this.stack[j];
-                if (tokenizer.test()) {
+                const test = tokenizer.test(source)
+                if (test) {
                     result = true
-                    tokenizer.read()
+                    tokenizer.read(source)
+                    pass++
+                    if (tokenizer.type == 'if-wrapper') {
+                        source.pop()
+                        return true
+                    }
+                    /* ATTENTION THIS CODE IS AN EXPERIMENTAL CODE!!! */
+                    /*     IT MAY OR MAY NOT CAUSE BUGS IN FUTURE     */
+                    if (pass >= Math.round(this.stack.length * 0.8)) {
+                        source.pop()
+                        return true
+                    }
                 } else if (
                     !(
-                        (!tokenizer.test() && tokenizer.nullable()) ||
-                        (!tokenizer.test() && tokenizer.type == 'if-wrapper')
+                        (!test && tokenizer.nullable()) ||
+                        (!test && tokenizer.type == 'if-wrapper')
                     )
                 ) {
-                    this.source.pop()
+                    source.pop()
                     return false
                 }
             }
-            this.source.pop()
+            source.pop()
             return result
         }
-        this.source.pop()
+        source.pop()
         return false
     }
 }
@@ -127,17 +147,23 @@ export class IFWrapper extends Wrapper {
 
     tester: Reader
 
-    constructor(name: string, source: Input, tester: Reader) {
-        super(name, source, undefined)
-        tester.source = this.source
+    constructor(name: string, tester: Reader) {
+        super(name, undefined)
         tester.parent = this
         this.tester = tester
     }
 
-    test() {
+    test(source: Input) {
         if (this.stack.length > 0) {
-            if (this.tester.test() && super.test()) return true
+            if (this.tester.test(source) && super.test(source)) return true
         }
         return false
+    }
+}
+
+export class WrapperSerial extends Wrapper {
+    read(source: Input): Token[] {
+        const tokens: Token[] = []
+        return tokens
     }
 }

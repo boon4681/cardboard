@@ -1,3 +1,3 @@
 # cardboard
 
-A custom lexer language for minecraft mcfunction.
+Cardboard is a lexer language for Minecraft syntax.

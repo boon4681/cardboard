@@ -1,54 +1,56 @@
-#lexer cardboard:0.0.1
+#cardboard:0.0.1
 #v[1.19]
 
 lexer hi{
-
+    
 }
 
 lexer String {
     lexer Quoted {
-        text = "[\\\']+"
-        escape = '\\\\[tbrn\'\"\\\\]'
-        close = "'" -> pop
+        text -> ignore;
+        text = "[\\\']+" "hi";
+        escape = '\\\\[tbrn\'\"\\\\]';
+        close = "'" -> pop;
     }
 
     lexer DoubleQuoted {
-        text = "[\\\"]+"
-        escape = '\\\\[tbrn\'\"\\\\]'
-        double_quoted_close = '"' -> pop
+        text = "[\\\"]+";
+        escape = '\\\\[tbrn\'\"\\\\]';
+        double_quoted_close = '"' -> pop;
     }
 
     @if("'"){
-        open = "'" -> push(Quoted)
+        open = "'" -> push(Quoted);
     }
-    double_quoted_open = "'" -> push(Quoted)
+
+    double_quoted_open = "'" -> push(Quoted);
 }
 
 lexer SelectorOptions {
     lexer name {
-        key = "name"
-        expr = "(?:\\s*)(=(?:\\s*)(\\!)?)"
-        value = String
+        key = "name";
+        expr = "(?:\\s*)(=(?:\\s*)(\\!)?)";
+        value = String;
     }
 
-    whitespace -> ignore
-    data = name | hello
-    whitespace -> ignore
+    whitespace -> ignore;
+    data = name | hello;
+    whitespace -> ignore;
 }
 
 lexer EntitySelector {
-    name = "minecraft:entity"
+    name = "minecraft:entity";
     
     @if("@"){
-        target = "@[praes]"
+        target = "@[praes]";
 
-        whitespace -> ignore
+        whitespace -> ignore;
 
         @if("["){
-            LSQUARE = "["
-            RSQUARE = "]"
+            LSQUARE = "[";
+            RSQUARE = "]";
         }
     }
  
-    target = "[A-Za-z]" @registries.block.jo
+    target = "[A-Za-z]" @registries.block.jo;
 }

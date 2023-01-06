@@ -6,7 +6,6 @@ export class Reader implements Tokenizer {
     regex: RegExp
     type: TokenizerType = "reader"
     parent!: Wrapper
-    source!: Input
     options: TokenizerOptions = { mode: 'normal', fragment: false, ignored: false, nullable: false }
 
     constructor(name: string, regex: RegExp, options?: TokenizerOptions) {
@@ -33,31 +32,31 @@ export class Reader implements Tokenizer {
         return _
     }
 
-    test() {
-        const m = this.regex.exec(this.source.to_end())
+    test(source: Input) {
+        const m = this.regex.exec(source.to_end())
         return m ? m.index === 0 : false
     }
 
-    match() {
-        return this.test() && this.regex.exec(this.source.to_end())
+    match(source: Input) {
+        return this.test(source) && this.regex.exec(source.to_end())
     }
 
-    read(): Token | undefined {
-        const match = this.match()
-        const start_line = this.source.line + 0
-        const start_col = this.source.column + 0
+    read(source: Input): Token | undefined {
+        const match = this.match(source)
+        const start_line = source.line + 0
+        const start_col = source.column + 0
         if (match) {
-            const start = this.source.index
+            const start = source.index
             const end = start + match[0].length + 0
-            const value = this.source.seek(match[0].length)
+            const value = source.seek(match[0].length)
             return new Token(this.name, value, {
                 start: {
                     line: start_line,
                     column: start_col
                 },
                 end: {
-                    line: this.source.line,
-                    column: this.source.column
+                    line: source.line,
+                    column: source.column
                 },
                 range: [start, end],
                 size: value.length
@@ -66,6 +65,6 @@ export class Reader implements Tokenizer {
         if (this.nullable()) {
             return undefined
         }
-        throw new Error(`${this.source.name}:${start_line}:${start_col}\n${this.source.pan([-100, 0], true)} <- missing ${this.regex}`)
+        throw new Error(`${source.name}:${start_line}:${start_col}\n${source.pan([-100, 0], true)} <- missing ${this.regex}`)
     }
 }
