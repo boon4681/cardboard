@@ -1,7 +1,8 @@
 import chalk from "chalk"
 import { readFileSync } from "node:fs"
+import { Group, GroupContinuous } from "./tokenizer/group"
 import { Reader } from "./tokenizer/reader"
-import { Wrapper } from "./tokenizer/wrapper"
+import { IFWrapper, Wrapper } from "./tokenizer/wrapper"
 
 export type Location = {
     line: number
@@ -239,12 +240,121 @@ export class CardboardLexer {
     constructor(public source: Input) {
         const header = new Wrapper('header', source)
         const hidden = new Reader('hidden', /[\s\r\n]*/, { mode: 'normal', ignored: true })
-        header.box(wrap => {
+        const Hidden = new Reader('hidden', /[\s\r\n]+/, { mode: 'normal', ignored: true })
+        const Whitespace = new Reader('whitespace', /[\u0020\u0009\u000C]+/, { mode: 'normal', ignored: true })
+        const whitespace = new Reader('whitespace', /[\u0020\u0009\u000C]*/, { mode: 'normal', ignored: true })
+        const identifier = new Reader('identifier', /[_\w][_\w\d]*/)
+
+        const lexerWrapper = new Wrapper('lexer', source)
+        const lexerBlock = new Wrapper('lexer.block', source)
+
+        const expressionWrapper = new Wrapper('expr', source)
+
+        const Strings = new Wrapper('strings', source)
+        const QuotedString = new IFWrapper('strings.quoted', source, new Reader('strings.quoted.tester', /'/))
+        const DoubleQuotedString = new IFWrapper('strings.double_quoted', source, new Reader('strings.double_quoted.tester', /"/))
+        const QuotedStringContext = new Wrapper('strings.quoted.context', source)
+        const DoubleQuotedStringContext = new Wrapper('strings.double_quoted.context', source)
+
+        Strings.wrap(wrap => {
+            wrap(QuotedString)
+            wrap(DoubleQuotedString)
+        })
+        QuotedString.wrap(wrap => {
+            wrap(new Reader('strings.quoted.open', /\'/, {
+                mode: 'push',
+                tokenizer: QuotedStringContext
+            }))
+        })
+        QuotedStringContext.wrap(wrap => {
+            const Context = new GroupContinuous('strings.context', source, { mode: 'normal', nullable: true })
+            wrap(Context)
+            Context.wrap(wrap => {
+                wrap(new Reader('text', /[^\\\'\r\n]+/, { mode: 'normal', nullable: true }))
+                wrap(new Reader('escape', /\\[tbrn\"\'\\]/, { mode: 'normal', nullable: true }))
+            })
+            wrap(new Reader('strings.double_quoted.close', /\'/, {
+                mode: 'pop'
+            }))
+        })
+
+        DoubleQuotedString.wrap(wrap => {
+            wrap(new Reader('strings.double_quoted.open', /\"/, {
+                mode: 'push',
+                tokenizer: DoubleQuotedStringContext
+            }))
+        })
+
+        DoubleQuotedStringContext.wrap(wrap => {
+            const Context = new GroupContinuous('strings.context', source, { mode: 'normal', nullable: true })
+            wrap(Context)
+            Context.wrap(wrap => {
+                wrap(new Reader('text', /[^\\\"\r\n]+/, { mode: 'normal', nullable: true }))
+                wrap(new Reader('escape', /\\[tbrn\"\'\\]/, { mode: 'normal', nullable: true }))
+            })
+            wrap(new Reader('strings.double_quoted.close', /\"/, {
+                mode: 'pop'
+            }))
+        })
+
+        header.wrap(wrap => {
             wrap(new Reader('hashtag', /#/))
             wrap(new Reader('content', /[^\r\n]*/))
         })
-        this.wrap(header)
+
+        lexerWrapper.wrap(wrap => {
+            wrap(new Reader('lexer.keyword', /lexer/))
+            wrap(Hidden)
+            wrap(identifier.clone({ name: 'lexer.name' }))
+            wrap(hidden)
+            wrap(new Reader('lexer.punctuation.wrapper.block.open', /\{/, {
+                mode: 'push',
+                tokenizer: lexerBlock
+            }))
+        })
+
+        lexerBlock.wrap(wrap => {
+            const lexerBlockContent = new Group('lexer.block.content', source)
+            wrap(hidden)
+            wrap(lexerBlockContent)
+            wrap(hidden)
+            lexerBlockContent.wrap(wrap => {
+                wrap(new Reader('lexer.punctuation.wrapper.block.close', /\}/, {
+                    mode: 'pop'
+                }))
+                wrap(lexerWrapper)
+                wrap(expressionWrapper)
+            })
+        })
+
+        expressionWrapper.wrap(wrap => {
+            const expressionValue = new Wrapper('tokenizer.value.context', source)
+            wrap(identifier.clone({ name: 'tokenizer.name' }))
+            wrap(hidden)
+            wrap(new Reader('tokenizer.assign', /=/, {
+                mode: 'push',
+                tokenizer: expressionValue
+            }))
+            expressionValue.wrap(wrap => {  
+                const serial_value = new GroupContinuous('tokenizer.value',source)
+                const value = new Wrapper('tokenizer.value',source)
+                wrap(hidden)
+                wrap(value)
+                wrap(new Reader('tokenizer.end', /\r\n|\n/, {
+                    mode: 'pop' 
+                }))
+
+                value.wrap(wrap=>{
+                    wrap(Strings)
+                    wrap(identifier.clone({name:'lexer.name'}))
+                    wrap(new Reader('cardboard.metadata',/\@(?:[_\w][_\w\d]*)(?:\.(?:[_\w][_\w\d]*))*/))
+                })
+            })
+        })
+
         this.wrap(hidden)
+        this.wrap(header)
+        this.wrap(lexerWrapper)
     }
 
     wrap(tokenizer: Tokenizer) {
@@ -255,12 +365,16 @@ export class CardboardLexer {
     read() {
         const tokens: Token[] = []
         while (!this.source.eof()) {
-            for (const wrapper of this.stack) {
-                const test = wrapper.test()
+            for (const tokenizer of this.stack) {
+                if (tokenizer.fragment()) continue
+                const test = tokenizer.test()
                 if (test) {
-                    const result = wrapper.read()
+                    const result = tokenizer.read()
                     if (result) {
-                        tokens.push(...[result].flat(1))
+                        console.log(tokenizer.name, tokenizer.options.ignored)
+                        if (!tokenizer.options.ignored) {
+                            tokens.push(...[result].flat(1))
+                        }
                     }
                 }
             }

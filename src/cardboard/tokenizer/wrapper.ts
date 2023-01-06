@@ -1,5 +1,6 @@
 import chalk from "chalk"
 import { Input, Token, Tokenizer, TokenizerOptions, TokenizerType } from "../lexer"
+import { Reader } from "./reader"
 
 export class Wrapper implements Tokenizer {
     name: string
@@ -27,12 +28,12 @@ export class Wrapper implements Tokenizer {
         return this.options.mode == 'normal' ? this.options.nullable || false : false
     }
 
-    box(callback: (wrap: (reader: Tokenizer) => void) => void) {
+    wrap(callback: (wrap: (tokenizer: Tokenizer) => void) => void) {
         const self = this
-        function wrap(reader: Tokenizer) {
-            reader.parent = self
-            reader.source = self.source
-            self.stack.push(reader)
+        function wrap(tokenizer: Tokenizer) {
+            tokenizer.parent = self
+            tokenizer.source = self.source
+            self.stack.push(tokenizer)
         }
         callback(wrap)
         return this
@@ -44,6 +45,7 @@ export class Wrapper implements Tokenizer {
             if (tokenizer.fragment()) continue
             if (tokenizer.test()) {
                 const result = tokenizer.read()
+                console.log('@wrapper',tokenizer.name,tokenizer.type)
                 if (result) {
                     if (tokenizer.type == 'reader' || tokenizer.type == 'wrapper') {
                         if (tokenizer.options.mode == "push") {
@@ -94,32 +96,48 @@ export class Wrapper implements Tokenizer {
 
     test(): boolean {
         this.source.push()
+        console.log("[[[[[[[[[[[",this.name)
         if (this.stack.length > 0) {
-            let reader: Tokenizer = this.stack[0]
-            let i = 0
-            while (!reader.test() &&
-                (
-                    (reader.type == 'if-wrapper') ||
-                    (reader.nullable())
-                ) &&
-                i < this.stack.length
-            ) {
-                reader = this.stack[i]
-                i++
-            }
-            for (let j = i; j < this.stack.length; j++) {
+            let result = false
+            for (let j = 0; j < this.stack.length; j++) {
                 const tokenizer = this.stack[j];
-                if (tokenizer.test() || (!tokenizer.test() && tokenizer)) {
+                if (tokenizer.test()) {
+                    result = true
                     tokenizer.read()
-                } else {
+                } else if (
+                    !(
+                        (!tokenizer.test() && tokenizer.nullable()) ||
+                        (!tokenizer.test() && tokenizer.type == 'if-wrapper')
+                    )
+                ) {
                     this.source.pop()
                     return false
                 }
             }
             this.source.pop()
-            return true
+            return result
         }
         this.source.pop()
+        return false
+    }
+}
+
+export class IFWrapper extends Wrapper {
+    type: TokenizerType = "if-wrapper"
+
+    tester: Reader
+
+    constructor(name: string, source: Input, tester: Reader) {
+        super(name, source, undefined)
+        tester.source = this.source
+        tester.parent = this
+        this.tester = tester
+    }
+
+    test() {
+        if (this.stack.length > 0) {
+            if (this.tester.test() && super.test()) return true
+        }
         return false
     }
 }
