@@ -29,6 +29,7 @@ export class Group implements Tokenizer {
     wrap(callback: (wrap: (reader: Tokenizer) => void) => void) {
         const self = this
         function wrap(tokenizer: Tokenizer) {
+            tokenizer.parent = self
             self.stack.push(tokenizer)
         }
         callback(wrap)

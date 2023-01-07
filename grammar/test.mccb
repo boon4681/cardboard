@@ -1,12 +1,18 @@
 #cardboard:0.0.1
 #v[1.19]
 
-lexer hi{}
-
 lexer hi{
-    lexer hello{
+    hi = 'kokonimita';
+    op = 'joi';
+}
 
+lexer yo{
+    lexer hello{
+        close = "'" -> pop;
+        close = "'" -> pop;
     }
+        close = "'" -> pop;
+        close = "'" -> pop;
 }
 
 lexer pe{

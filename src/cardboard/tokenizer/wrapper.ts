@@ -29,6 +29,7 @@ export class Wrapper implements Tokenizer {
     wrap(callback: (wrap: (tokenizer: Tokenizer) => void) => void) {
         const self = this
         function wrap(tokenizer: Tokenizer) {
+            tokenizer.parent = self
             self.stack.push(tokenizer)
         }
         callback(wrap)
@@ -49,18 +50,13 @@ export class Wrapper implements Tokenizer {
         const tokens: Token[] = []
         for (const tokenizer of this.stack) {
             if (tokenizer.fragment()) continue
-            if (source.stack.length == 0) console.log('@wrapper', this.strip(tokenizer))
+            // if (source.stack.length == 0) 
+            console.log('@wrapper', this.strip(tokenizer),tokenizer.test(source))
             if (tokenizer.test(source)) {
                 const result = tokenizer.read(source)
-                if (source.stack.length == 0)console.log(result)
+                if (source.stack.length == 0) console.log(result)
                 if (result) {
                     if (tokenizer.type == 'reader' || tokenizer.type == 'wrapper') {
-                        if (!tokenizer.options.ignored) {
-                            tokens.push(...[result].flat(1))
-                        }
-                        if (tokenizer.options.mode == "pop") {
-                            this.parent.queue.shift()
-                        }
                         if (tokenizer.options.mode == "push") {
                             if (tokenizer.options.tokenizer === 'self') {
                                 this.queue.unshift(this)
@@ -68,15 +64,22 @@ export class Wrapper implements Tokenizer {
                                 tokenizer.options.tokenizer.parent = this
                                 this.queue.unshift(tokenizer.options.tokenizer)
                             }
-                            while (this.queue.length > 0) {
-                                const tokenizer = this.queue[0]
-                                const result = tokenizer.read(source)
-                                if (result) {
-                                    tokens.push(...[result].flat(1))
-                                }
-                                else {
-                                    throw new Error(`No viable alternative.\n${chalk.red(source.pan(-100, true))}<- is not ${tokenizer.name}`)
-                                }
+                        }
+                        if (tokenizer.options.mode == "pop") {
+                            this.parent.queue.shift()
+                        }
+                        if (!tokenizer.options.ignored) {
+                            tokens.push(...[result].flat(1))
+                        }
+                        let last_queue = this.queue.length + 0
+                        while (this.queue.length > 0 && this.queue.length == last_queue) {
+                            const tokenizer = this.queue[0]
+                            const result = tokenizer.read(source)
+                            if (result) {
+                                tokens.push(...[result].flat(1))
+                            }
+                            else {
+                                throw new Error(`No viable alternative.\n${chalk.red(source.pan(-100, true))}<- is not ${tokenizer.name}`)
                             }
                         }
                     } else if (tokenizer.type == "group") {

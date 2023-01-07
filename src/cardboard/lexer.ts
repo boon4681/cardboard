@@ -364,9 +364,9 @@ export class CardboardLexer {
                 mode: 'pop'
             }))
             lexerBlockContent.wrap(wrap => {
-                wrap(hidden)
-                wrap(IF)
+                // wrap(hidden)
                 wrap(lexerWrapper)
+                wrap(IF)
                 wrap(expressionWrapper)
             })
         })
@@ -417,6 +417,7 @@ export class CardboardLexer {
 
         expressionWrapper.wrap(wrap => {
             const expressionValue = new Wrapper('tokenizer.value.context')
+            wrap(hidden)
             wrap(identifier.clone({ name: 'tokenizer.name' }))
             wrap(hidden)
             wrap(new IFWrapper('tokenizer.assign', new Reader('tokenizer.assign', /=/)).wrap(wrap => {
