@@ -43,6 +43,7 @@ export class Group implements Tokenizer {
             if (tokenizer.test(source)) {
                 // console.log("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@", tokenizer.name, tokenizer.type)
                 const result = tokenizer.read(source)
+                // console.log(result)
                 if (result) {
                     if ([result].flat(1).length == 0) return undefined
                     if (tokenizer.type == 'reader' || tokenizer.type == 'wrapper') {
@@ -57,15 +58,11 @@ export class Group implements Tokenizer {
                         if (tokenizer.options.mode == "pop") {
                             this.parent.parent.queue.shift()
                         }
-                        if (tokenizer.options.ignored) {
-                            return undefined
-                        } else {
+                        if (!tokenizer.options.ignored) {
                             return [...[result].flat(1)]
                         }
                     } else if (tokenizer.type == "group") {
-                        if (tokenizer.options.ignored) {
-                            return undefined
-                        } else {
+                        if (!tokenizer.options.ignored) {
                             return result as Token[]
                         }
                     } else if (tokenizer.type == "if-wrapper") {
@@ -100,7 +97,7 @@ export class GroupSerial extends Group {
             if (result && result.length > 0) {
                 tokens.push(...[result].flat(1))
             } else {
-                return undefined
+                return tokens
             }
         }
         return tokens

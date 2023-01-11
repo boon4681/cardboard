@@ -2,21 +2,7 @@
 #v[1.19]
 
 lexer hi{
-    hi = 'kokonimita';
-    op = 'joi';
-}
-
-lexer yo{
-    lexer hello{
-        close = "'" -> pop;
-        close = "'" -> pop;
-    }
-        close = "'" -> pop;
-        close = "'" -> pop;
-}
-
-lexer pe{
-
+    
 }
 
 lexer String {
@@ -33,44 +19,9 @@ lexer String {
         double_quoted_close = '"' -> pop;
     }
 
-    @if("'") {
+    @if("'"){
         open = "'" -> push(Quoted);
     }
 
     double_quoted_open = "'" -> push(Quoted);
-}
-
-lexer DoubleQuoted {
-    text = "[\\\"]+";
-    escape = '\\\\[tbrn\'\"\\\\]';
-    double_quoted_close = '"' -> pop;
-}
-
-lexer SelectorOptions {
-    lexer name {
-        key = "name";
-        expr = "(?:\\s*)(=(?:\\s*)(\\!)?)";
-        value = String;
-    }
-
-    whitespace -> ignore;
-    data = name | hello;
-    whitespace -> ignore;
-}
-
-lexer EntitySelector {
-    name = "minecraft:entity";
-    
-    @if("@"){
-        target = "@[praes]";
-
-        whitespace -> ignore;
-
-        @if("["){
-            LSQUARE = "[";
-            RSQUARE = "]";
-        }
-    }
- 
-    target = "[A-Za-z]" @registries.block.jo;
 }
