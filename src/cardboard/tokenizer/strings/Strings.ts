@@ -1,4 +1,4 @@
-import { Wrapper } from "../../base/wrapper";
+import { Wrapper } from "../base/wrapper";
 import { DoubleQuotedString } from "./DoubleQuotedString";
 import { QuotedString } from "./QuotedString";
 

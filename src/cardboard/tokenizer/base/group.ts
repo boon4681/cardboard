@@ -1,11 +1,11 @@
 import chalk from "chalk"
-import { Input, Token, Tokenizer, TokenizerOptions, TokenizerType } from "../lexer"
+import { Input, Lexer, Token, Tokenizer, TokenizerOptions, TokenizerType } from "../../lexer"
 import { Wrapper } from "./wrapper"
 
 export class Group implements Tokenizer {
     name: string
     type: TokenizerType = "group"
-    parent!: Wrapper
+    parent!: Lexer
     options: TokenizerOptions = { mode: 'normal', fragment: false, ignored: false, nullable: false }
 
     stack: Tokenizer[] = []
@@ -47,6 +47,9 @@ export class Group implements Tokenizer {
                 if (result) {
                     if ([result].flat(1).length == 0) return undefined
                     if (tokenizer.type == 'reader' || tokenizer.type == 'wrapper') {
+                        if (tokenizer.options.mode == "pop") {
+                            this.parent.queue.shift()
+                        }
                         if (tokenizer.options.mode == "push") {
                             if (tokenizer.options.tokenizer === 'self') {
                                 this.parent.queue.unshift(this)
@@ -54,9 +57,6 @@ export class Group implements Tokenizer {
                                 tokenizer.options.tokenizer.parent = this.parent
                                 this.parent.queue.unshift(tokenizer.options.tokenizer)
                             }
-                        }
-                        if (tokenizer.options.mode == "pop") {
-                            this.parent.parent.queue.shift()
                         }
                         if (!tokenizer.options.ignored) {
                             return [...[result].flat(1)]

@@ -1,6 +1,6 @@
-import { GroupSerial } from "../../base/group"
-import { Reader } from "../../base/reader"
-import { IFWrapper, Wrapper } from "../../base/wrapper"
+import { GroupSerial } from "../base/group"
+import { Reader } from "../base/reader"
+import { IFWrapper, Wrapper } from "../base/wrapper"
 
 function DoubleQuotedStringBuilder() {
     const DoubleQuotedString = new IFWrapper('strings.quoted', new Reader('strings.quoted.tester', /"/))

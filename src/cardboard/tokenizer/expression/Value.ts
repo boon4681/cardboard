@@ -1,6 +1,6 @@
-import { Group } from "../../base/group";
-import { Reader } from "../../base/reader";
-import { Wrapper } from "../../base/wrapper";
+import { Group } from "../base/group";
+import { Reader } from "../base/reader";
+import { Wrapper } from "../base/wrapper";
 import { Hidden, identifier } from "../basic";
 import { Strings } from "../strings/Strings";
 

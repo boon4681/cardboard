@@ -1,15 +1,14 @@
 import chalk from "chalk"
-import { Input, Token, Tokenizer, TokenizerOptions, TokenizerType } from "../lexer"
+import { Input, Lexer, Token, Tokenizer, TokenizerOptions, TokenizerType } from "../../lexer"
 import { Reader } from "./reader"
 
 export class Wrapper implements Tokenizer {
     name: string
     type: TokenizerType = "wrapper"
-    parent!: Wrapper
+    parent!: Lexer
     options: TokenizerOptions = { mode: 'normal', fragment: false, ignored: false, nullable: false }
 
     stack: Tokenizer[] = []
-    queue: Tokenizer[] = []
 
     constructor(name: string, options?: TokenizerOptions) {
         this.name = name
@@ -29,21 +28,11 @@ export class Wrapper implements Tokenizer {
     wrap(callback: (wrap: (tokenizer: Tokenizer) => void) => void) {
         const self = this
         function wrap(tokenizer: Tokenizer) {
-            tokenizer.parent = self
+            tokenizer.parent = tokenizer.parent
             self.stack.push(tokenizer)
         }
         callback(wrap)
         return this
-    }
-
-    strip(tokenizer: Tokenizer) {
-        let stack: string[] = []
-        let tnz = tokenizer
-        while (tnz.parent && tnz.name != 'lexer') {
-            stack.push(tnz.name)
-            tnz = tnz.parent
-        }
-        return stack.reverse().join(' > ')
     }
 
     read(source: Input): Token[] {
@@ -65,22 +54,14 @@ export class Wrapper implements Tokenizer {
                         }
                         if (tnz.options.mode == "push") {
                             if (tnz.options.tokenizer === 'self') {
-                                this.queue.unshift(this)
+                                this.parent.queue.unshift(this)
                             } else {
-                                tnz.options.tokenizer.parent = this
-                                this.queue.unshift(tnz.options.tokenizer)
+                                tnz.options.tokenizer.parent = this.parent
+                                this.parent.queue.unshift(tnz.options.tokenizer)
                             }
-                            let last_queue = this.queue.length + 0
-                            while (this.queue.length > 0 && this.queue.length == last_queue) {
-                                const tokenizer = this.queue[0]
-                                const result = tokenizer.read(source)
-                                if (result) {
-                                    tokens.push(...[result].flat(1))
-                                }
-                                else {
-                                    throw new Error(`No viable alternative.\n${chalk.red(source.pan(-100, true))}<- is not ${tokenizer.name}`)
-                                }
-                            }
+                        }
+                        if(tnz.options.mode != 'normal'){
+                            return tokens
                         }
                     } else if (tnz.type == "group") {
                         if (!tnz.options.ignored) {
@@ -160,7 +141,7 @@ export class IFWrapper extends Wrapper {
 
     constructor(name: string, tester: Reader) {
         super(name, undefined)
-        tester.parent = this
+        tester.parent = this.parent
         this.tester = tester
     }
 
