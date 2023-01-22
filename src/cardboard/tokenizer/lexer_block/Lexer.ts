@@ -1,9 +1,9 @@
-import { GroupSerial } from "../../base/group"
-import { Reader } from "../../base/reader"
-import { Wrapper } from "../../base/wrapper"
+import { GroupSerial } from "../base/group"
+import { Reader } from "../base/reader"
+import { Wrapper } from "../base/wrapper"
 import { hidden, Hidden, identifier } from "../basic"
 import { Expression } from "../expression/Expression"
-import { IF } from "../if_statement/IF"
+import { IF } from "../if_statement/If"
 
 
 function LexerBuilder() {

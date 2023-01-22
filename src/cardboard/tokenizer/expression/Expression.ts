@@ -1,6 +1,6 @@
-import { Group, GroupSerial } from "../../base/group";
-import { Reader } from "../../base/reader";
-import { IFWrapper, Wrapper, WrapperSerial } from "../../base/wrapper";
+import { Group, GroupSerial } from "../base/group";
+import { Reader } from "../base/reader";
+import { IFWrapper, Wrapper, WrapperSerial } from "../base/wrapper";
 import { Hidden, hidden, identifier } from "../basic";
 import { Strings } from "../strings/Strings";
 import { Value } from "./Value";

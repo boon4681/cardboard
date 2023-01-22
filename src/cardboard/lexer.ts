@@ -1,8 +1,9 @@
 import chalk from "chalk"
 import { readFileSync } from "node:fs"
-import { Group, GroupSerial } from "./base/group"
-import { Reader } from "./base/reader"
-import { IFWrapper, Wrapper, WrapperSerial } from "./base/wrapper"
+import { Group, GroupSerial } from "./tokenizer/base/group"
+import { Reader } from "./tokenizer/base/reader"
+import { IFWrapper, Wrapper, WrapperSerial } from "./tokenizer/base/wrapper"
+import { Hidden } from "./tokenizer/basic"
 import { Expression } from "./tokenizer/expression/Expression"
 import { Lexer } from "./tokenizer/lexer_block/Lexer"
 import { Strings } from "./tokenizer/strings/Strings"
@@ -233,7 +234,7 @@ export type TokenizerType = "reader" | "group" | "wrapper" | "if-wrapper"
 export interface Tokenizer {
     name: string
     type: TokenizerType
-    parent: Tokenizer | null
+    parent: Lexer | null
     options: TokenizerOptions
     nullable(): boolean
     fragment(): boolean
@@ -241,14 +242,17 @@ export interface Tokenizer {
     test(input: Input): boolean
 }
 
-export class CardboardLexer {
+export interface Lexer {
+    stack: Tokenizer[]
+    queue: Tokenizer[]
+}
+
+export class CardboardLexer implements Lexer {
     stack: Tokenizer[] = []
+    queue: Tokenizer[] = []
+
     constructor(public source: Input) {
         const header = new Wrapper('header')
-        const hidden = new Reader('hidden', /[\s\r\n]*/, { mode: 'normal', ignored: false })
-        const Hidden = new Reader('hidden', /[\s\r\n]+/, { mode: 'normal', ignored: false })
-        const identifier = new Reader('identifier', /[_\w][_\w\d]*/)
-
         header.wrap(wrap => {
             wrap(new Reader('hashtag', /#/))
             wrap(new Reader('content', /[^\r\n]*/))
@@ -272,10 +276,24 @@ export class CardboardLexer {
                 const test = tokenizer.test(this.source)
                 if (test) {
                     const result = tokenizer.read(this.source)
+                    // console.log(result)
                     if (result) {
                         if (!tokenizer.options.ignored) {
                             tokens.push(...[result].flat(1))
                         }
+                        console.log(this.queue)
+                        let last_queue = this.queue.length + 0
+                        while (this.queue.length > 0 && this.queue.length == last_queue) {
+                            const tokenizer = this.queue[0]
+                            const result = tokenizer.read(this.source)
+                            if (result) {
+                                tokens.push(...[result].flat(1))
+                            }
+                            else {
+                                throw new Error(`No viable alternative.\n${chalk.red(this.source.pan(-100, true))}<- is not ${tokenizer.name}`)
+                            }
+                        }
+                        // console.log(tokens)
                     }
                 }
             }
@@ -283,7 +301,7 @@ export class CardboardLexer {
                 err: new Error(`No viable alternative.\n${chalk.red(this.source.pan(-100, true))}<- no lexer`)
             })
         }
-        // console.log(tokens.map(a=>a.raw).join(''))
+        console.log(tokens.map(a => a.raw).join(''))
         console.log("DONE")
     }
 }
@@ -297,7 +315,13 @@ export class Cardboard {
     // }
 
     constructor() {
-        const raw = readFileSync('./grammar/test.mccb', 'utf8')
+        // const raw = readFileSync('./grammar/test.mccb', 'utf8')
+        let recursion_test = new Array<String>(3).fill("")
+        const test = recursion_test.reduce((a, b,i) => {
+            return `lexer hi_${i+1}{${a}}`
+        },"yo= 'wow';")
+        const raw = '#hi\n\r#yo\n\r' + test + ''
+        console.log(raw)
         const input = new Input('./grammar/test.mccb', raw)
         try {
             new CardboardLexer(input).read()

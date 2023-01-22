@@ -1,11 +1,11 @@
-import { Input, Token, Tokenizer, TokenizerOptions, TokenizerType } from "../lexer"
+import { Input, Lexer, Token, Tokenizer, TokenizerOptions, TokenizerType } from "../../lexer"
 import { Wrapper } from "./wrapper"
 
 export class Reader implements Tokenizer {
     name: string
     regex: RegExp
     type: TokenizerType = "reader"
-    parent!: Wrapper
+    parent!: Lexer
     options: TokenizerOptions = { mode: 'normal', fragment: false, ignored: false, nullable: false }
 
     constructor(name: string, regex: RegExp, options?: TokenizerOptions) {
