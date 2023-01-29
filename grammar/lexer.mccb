@@ -7,7 +7,6 @@ lexer hi{
 
 lexer String {
     lexer Quoted {
-        text -> ignore;
         text = "[\\\']+" "hi";
         escape = '\\\\[tbrn\'\"\\\\]';
         close = "'" -> pop;

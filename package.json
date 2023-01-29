@@ -4,7 +4,7 @@
   "main": "index.js",
   "license": "MIT",
   "scripts": {
-    "dev": "npx swc -w src -d dist",
+    "dev": "node -r @swc-node/register ./src/main.ts",
     "start": "node  ./dist/main.js ",
     "build": "npx swc src -d dist"
   },
