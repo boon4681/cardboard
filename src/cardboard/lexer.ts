@@ -14,6 +14,36 @@ export class Lexer extends LexerBase {
         const strings = new Wrapper('strings')
         const qouted_strings = new Wrapper("strings.qouted")
         const double_qouted_strings = new Wrapper("strings.double_qouted")
+        const group = new Wrapper('group')
+        const group_children = new Wrapper('group.children')
+        const wrapper = new Wrapper('wrapper')
+        const wrapper_children = new Wrapper('wrapper.children')
+
+        wrapper.add([
+            new Reader('wrapper.children.open', /\[/).set({ mode: 'push', ignore: false, nullable: false, tokenizer: wrapper_children }),
+            new Reader('wrapper.mode',/[\*\+\?]/).set({ mode: 'normal', ignore: false, fragment: false, nullable: true })
+        ])
+
+        group.add([
+            new Reader('group.children.open', /\(/).set({ mode: 'push', ignore: false, nullable: false, tokenizer: group_children }),
+            new Reader('group.mode',/[\*\+\?]/).set({ mode: 'normal', ignore: false, fragment: false, nullable: true })
+        ])
+
+        wrapper_children.add([
+            new GroupSerial('wrapper.children').add([
+                Hidden,
+                expr,
+            ]).set({ mode: 'normal', ignore: false, fragment: false, nullable: true }),
+            new Reader('wrapper.children.close', /\]/).set({ mode: 'pop', ignore: false, nullable: false })
+        ])
+
+        group_children.add([
+            new GroupSerial('group.children').add([
+                Hidden,
+                expr,
+            ]).set({ mode: 'normal', ignore: false, fragment: false, nullable: true }),
+            new Reader('group.children.close', /\)/).set({ mode: 'pop', ignore: false, nullable: false })
+        ])
 
         const if_stats = new Wrapper('if')
         const if_stats_block = new Wrapper('if.block')
@@ -24,12 +54,12 @@ export class Lexer extends LexerBase {
         ])
 
         lexer.add([
-            new IFWrapper('lexer.bind',new Reader('lexer.bind',/\@bind/)).add([
-                new Reader('lexer.bind',/\@bind/),
+            new IFWrapper('lexer.bind', new Reader('lexer.bind', /\@bind/)).add([
+                new Reader('lexer.bind', /\@bind/),
                 hidden,
                 new Reader('lexer.bind.punctuation.open', /\(/),
                 hidden,
-                new Reader('lexer.bind.name',/([\w][_\w\d]*)\:([\w][_\w\d]*)|([\w][_\w\d]*)/),
+                new Reader('lexer.bind.name', /([\w][_\w\d]*)\:([\w][_\w\d]*)|([\w][_\w\d]*)/),
                 hidden,
                 new Reader('lexer.bind.punctuation.close', /\)/),
                 hidden
@@ -46,7 +76,9 @@ export class Lexer extends LexerBase {
                 lexer.clone(),
                 expr,
                 Hidden,
-                if_stats
+                if_stats,
+                group,
+                wrapper
             ]).set({ mode: 'normal', ignore: false, fragment: false, nullable: true }),
             new Reader('lexer.block.close', /\}/).set({ mode: 'pop', ignore: false, nullable: false })
         ])
@@ -57,7 +89,7 @@ export class Lexer extends LexerBase {
             new Reader('expr.assignment', /=/),
             hidden,
             expr_value,
-            new WrapperSerial('value').add([
+            new WrapperSerial('expr.value').add([
                 Hidden,
                 expr_value
             ]).set({ mode: 'normal', ignore: false, fragment: false, nullable: true }),
@@ -80,7 +112,9 @@ export class Lexer extends LexerBase {
         expr_value.add([
             identifier.fragment('lexer.name'),
             strings,
-            new Reader('cardboard.metadata', /\@(?:[_\w][_\w\d]*)(?:\.(?:[_\w][_\w\d]*))*/)
+            new Reader('cardboard.metadata', /\@(?:[_\w][_\w\d]*)(?:\.(?:[_\w][_\w\d]*))*/),
+            group,
+            wrapper
         ])
 
         if_stats.add([
@@ -93,13 +127,21 @@ export class Lexer extends LexerBase {
             new Reader('if.condition.close', /\)/),
             hidden,
             new Reader('if.block.open', /\{/).set({ mode: 'push', ignore: false, nullable: false, tokenizer: if_stats_block }),
+            hidden,
+            new IFWrapper('if.block.stop.check', new Reader('if.block.stop.check', /\-\>/)).add([
+                new Reader('if.block.stop.start', /\-\>/),
+                hidden,
+                new Reader('if.block.stop', /end/)
+            ])
         ])
 
         if_stats_block.add([
             new GroupSerial('lexer.context').add([
                 expr,
                 Hidden,
-                if_stats
+                if_stats,
+                group,
+                wrapper
             ]).set({ mode: 'normal', ignore: false, fragment: false, nullable: true }),
             new Reader('if.block.close', /\}/).set({ mode: 'pop', ignore: false, nullable: false }),
         ])

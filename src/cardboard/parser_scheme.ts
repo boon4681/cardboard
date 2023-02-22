@@ -29,7 +29,7 @@ export class Node implements Node {
     accept(visitor: Visitor) {
         const cast = (visitor as unknown as { [k: string]: Function })
         if (!this.visitor) {
-            this.visitor = 'visit' + this.type.slice(0, 1).toUpperCase() + this.type.slice(1)
+            this.visitor = 'visit' + this.type.split('.').map(a => a.slice(0, 1).toUpperCase() + a.slice(1)).join('')
         }
         if (cast[this.visitor]) {
             return cast[this.visitor].call(visitor, this)
@@ -46,7 +46,7 @@ export class Node implements Node {
         const result = []
         for (const node of this.children) {
             if (!node.visitor) {
-                node.visitor = 'visit' + node.type.slice(0, 1).toUpperCase() + node.type.slice(1)
+                node.visitor = 'visit' + node.type.split('.').map(a => a.slice(0, 1).toUpperCase() + a.slice(1)).join('')
             }
             if (cast[node.visitor]) {
                 const r = cast[node.visitor].call(visitor, node)
@@ -302,7 +302,92 @@ class parser_grammar_parser {
     }
 }
 
-class Visitor {
+export interface Visitor { }
+
+class tsBuilder implements Visitor {
+    ts: string = ``
+    constructor(
+        public name: string
+    ) {
+        this.ts = `interface ${name} extends Node`
+    }
+    stack = 0
+    visitRoot(node: RootNode) {
+        this.ts += '{'
+        const children = node.acceptChildren(this)
+        this.ts += Array.from(new Set(children.filter(a => a.search(':') > -1))).concat(
+            'children:(' + Array.from(new Set(children.filter(a => a.search(':') == -1).concat('Node'))).join('|') + ')[]'
+        ).map(a => '\n    ' + a).join(';')
+        this.ts += '\n}'
+        return this.ts
+    }
+    visitWrapper(node: WrapperNode) {
+        this.stack += 1
+        let wrapper = ''
+        let space = '\n' + new Array(this.stack).fill('    ').join('')
+        if (node.attr) {
+            if (node.attr != 'children') {
+                wrapper += node.attr + ((node.action == 'null or once' || node.action == 'null or repeat') ? '?' : '') + ':Node'
+                node.acceptChildren(this).join('|')
+            }
+        } else {
+            wrapper += 'children:('
+            wrapper += Array.from(new Set(
+                node.acceptChildren(this)
+                    .map(a => a.split(':')).map(a => a[0].slice(0, 1).search(/[a-z]/) == -1 ? a[0] : a[1])
+                    .filter(a => a != 'Node')
+                    .concat('Node')
+            )).join('|')
+            wrapper += ')[]'
+        }
+        this.stack -= 1
+        return wrapper
+    }
+    visitGroup(node: GroupNode) {
+        this.stack += 1
+        let group = ''
+        let space = '\n' + new Array(this.stack).fill('    ').join('')
+        if (node.attr) {
+            if (node.attr != 'children') {
+                group += node.attr + ((node.action == 'null or once' || node.action == 'null or repeat') ? '?' : '') + ':Node'
+                node.acceptChildren(this).join('|')
+            }
+        } else {
+            group += Array.from(new Set(node.acceptChildren(this)
+                .map(a => a.split(':')).map(a => a[0].slice(0, 1).search(/[a-z]/) == -1 ? a[0] : a[1])
+                .filter(a => a != 'Node').concat('Node')))
+                .join('|')
+        }
+        this.stack -= 1
+        return group
+    }
+    visitToken(node: TokenNode) {
+        if (node.action.value != 'ignore' && !node.name.startsWith('!')) {
+            if (node.action.value == 'normal' && this.stack == 0) {
+                if (node.name.includes('.')) {
+                    return node.name.split('.').map(a => a.slice(0, 1).toUpperCase() + a.slice(1)).join('') + ':Node'
+                } else {
+                    return node.name + ':Node'
+                }
+            }
+            if (node.action.value?.startsWith('$')) {
+                return node.action.value.slice(1) + ':Node'
+            }
+            if (node.action.value?.startsWith('#')) {
+                if (node.name.includes('.')) {
+                    return node.name.split('.').map(a => a.slice(0, 1).toUpperCase() + a.slice(1)).join('') + ':' + node.action.value.slice(1)
+                } else {
+                    return node.name + ':' + node.action.value.slice(1)
+                }
+            }
+        }
+        if (node.action.value?.startsWith('#')) {
+            return node.action.value.slice(1)
+        }
+    }
+}
+
+class SchemeVisitor implements Visitor {
     constructor(
         public lexer: Lexer,
         public scheme: { [k: string]: ParserScheme }
@@ -356,7 +441,11 @@ class Visitor {
         const result = this.stack.pop()
         if (node.attr && result) {
             result.type = node.attr;
-            (this.stack[this.stack.length - 1] as any)[node.attr] = result
+            if (node.attr == 'children') {
+                (this.stack[this.stack.length - 1] as any)[node.attr] = result.children
+            } else {
+                (this.stack[this.stack.length - 1] as any)[node.attr] = result
+            }
         } else if (result) {
             for (const node of result.children) {
                 this.stack[this.stack.length - 1].children.push(node)
@@ -393,7 +482,11 @@ class Visitor {
         const result = this.stack.pop()
         if (node.attr && result) {
             result.type = node.attr;
-            (this.stack[this.stack.length - 1] as any)[node.attr] = result
+            if (node.attr == 'children') {
+                (this.stack[this.stack.length - 1] as any)[node.attr] = result.children
+            } else {
+                (this.stack[this.stack.length - 1] as any)[node.attr] = result
+            }
         } else if (result) {
             for (const node of result.children) {
                 this.stack[this.stack.length - 1].children.push(node)
@@ -423,7 +516,22 @@ class Visitor {
                 }
             }
         }
-        if (node.name == token.name) {
+        if (node.name.startsWith('?') && node.name.slice(1) != token.name) {
+            if (action.value == 'normal') {
+                const node = new Node('normal');
+                node.value = '';
+                this.stack[this.stack.length - 1].children.push(node)
+                return node
+            } else if (action.value == 'ignore') {
+                return new Node('null')
+            } else if (action.value?.startsWith('$')) {
+                const node = new Node(action.value.slice(1));
+                node.value = '';
+                (this.stack[this.stack.length - 1] as any)[action.value.slice(1)] = node
+                return node
+            }
+        }
+        if (node.name == token.name || (node.name.startsWith('?') && node.name.slice(1) == token.name)) {
             this.lexer.index++
             if (action.value == 'normal') {
                 const node = new Node(token.name);
@@ -467,6 +575,7 @@ class Visitor {
 
 export class ParserScheme {
     ast: Node
+    ts: string
 
     constructor(
         public name: string,
@@ -477,11 +586,12 @@ export class ParserScheme {
         // console.log(lexer.tokens.map(a => { return { name: a.name, value: a.value } }))
         const parser = new parser_grammar_parser(lexer)
         this.ast = parser.ast
-        console.log(JSON.stringify(this.ast))
+        // console.log(JSON.stringify(this.ast))
+        this.ts = this.ast.accept(new tsBuilder(this.name))
     }
 
     eat(lexer: Lexer, scheme: { [k: string]: ParserScheme }) {
-        const visitor = new Visitor(lexer, scheme)
+        const visitor = new SchemeVisitor(lexer, scheme)
         const result = this.ast.accept(visitor) as Node
         result.type = this.name
         return result

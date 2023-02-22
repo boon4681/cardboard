@@ -1,5 +1,9 @@
+import { writeFileSync } from "fs"
+import path from "path"
+import { Tokenizer } from "pulpboard"
 import { Lexer } from "./lexer"
-import { ParserScheme } from "./parser_scheme"
+import { Node, ParserScheme, Visitor } from "./parser_scheme"
+import { Box, Expression, Group, Header, IfStatement, LexerDeclaration, Wrapper } from "./type"
 
 const header_scheme = new ParserScheme('Header',
     `
@@ -7,7 +11,7 @@ header
 `
 )
 
-const wrapper_scheme = new ParserScheme('WrapperDeclaration',
+const lexer_scheme = new ParserScheme('LexerDeclaration',
     `
 @bind[
     lexer.bind -> ignore
@@ -19,9 +23,11 @@ lexer.keyword -> $keyword
 lexer.name -> $name
 lexer.block.open -> ignore
 @children(
-    !lexer -> #WrapperDeclaration
+    !lexer -> #LexerDeclaration
     !expr -> #Expression
     !if -> #IfStatement
+    !group -> #Group
+    !wrapper -> #Wrapper
 )*
 lexer.block.close -> ignore
 `
@@ -35,6 +41,8 @@ expr.assignment -> ignore
     strings
     cardboard.metadata
     lexer.name
+    !group -> #Group
+    !wrapper -> #Wrapper
 )*
 @action[
     expr.options.start -> ignore
@@ -63,6 +71,31 @@ if.block.open -> ignore
     !if -> #IfStatement
 )*
 if.block.close -> ignore
+@stop[
+    if.block.stop.start -> ignore
+    if.block.stop -> ignore
+]?
+`
+)
+
+const group_scheme = new ParserScheme('Group',
+    `
+group.children.open -> ignore
+(
+    !expr -> #Expression
+)*
+group.children.close -> ignore
+?group.mode -> $mode
+`
+)
+const wrapper_scheme = new ParserScheme('Wrapper',
+    `
+wrapper.children.open -> ignore
+(
+    !expr -> #Expression
+)*
+wrapper.children.close -> ignore
+?wrapper.mode -> $mode
 `
 )
 
@@ -71,25 +104,53 @@ const box_scheme = new ParserScheme('Box',
     header -> #Header
     header -> #Header
     (
-        !lexer -> #WrapperDeclaration
+        !lexer -> #LexerDeclaration
     )*
     `
 )
+
+class TreeVisitor implements Visitor {
+    constructor(
+        public lexer: Lexer
+    ) { }
+    stack: Tokenizer<string, any>[] = []
+    visitBox(node: Box) {
+        node.acceptChildren(this)
+    }
+    visitHeader(node: Header) { }
+    visitLexerDeclaration(node: LexerDeclaration) {
+        node.acceptChildren(this)
+    }
+    visitExpression(node: Expression) {
+        node.acceptChildren(this)
+    }
+    visitStrings(node: Node) { }
+    visitIfStatement(node: IfStatement) { }
+
+    visitWrapper(node: Wrapper) { }
+    visitGroup(node: Group) { }
+    visitLexerName(node: Node) { }
+    visitCardboardMetadata(node: Node) { }
+}
+
+const scheme = {
+    'Header': header_scheme,
+    'LexerDeclaration': lexer_scheme,
+    'Expression': expr_scheme,
+    'IfStatement': if_scheme,
+    'Group': group_scheme,
+    'Wrapper': wrapper_scheme
+}
+
+// writeFileSync(path.join(__dirname, 'type.ts'), 'import { Node } from "./parser_scheme";\n' + [
+//     header_scheme, lexer_scheme, expr_scheme, if_scheme, group_scheme, wrapper_scheme, box_scheme
+// ].map(key => 'export ' + key.ts).join('\n'))
 
 export class Parser {
     constructor() { }
 
     parse(lexer: Lexer) {
-        const scheme = {
-            'Header': header_scheme,
-            'WrapperDeclaration': wrapper_scheme,
-            'Expression': expr_scheme,
-            'IfStatement': if_scheme
-        }
-        console.log(
-            JSON.stringify(
-                box_scheme.eat(lexer, scheme)
-            )
-        )
+        const visitor = new TreeVisitor(lexer)
+        box_scheme.eat(lexer, scheme).accept(visitor)
     }
 }
