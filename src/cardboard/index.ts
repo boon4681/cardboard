@@ -14,7 +14,7 @@ export class Cardboard {
         // const raw = test + ''
         // console.log(raw)
         // writeFileSync('./test',raw)
-        console.log(Buffer.byteLength(raw, 'utf8'))
+        // console.log(Buffer.byteLength(raw, 'utf8'))
         const input = new Input('./test/grammar/test.box', readFileSync('./test/grammar/test.box', {
             encoding: 'utf8'
         }))
@@ -23,8 +23,8 @@ export class Cardboard {
             const lexer = new Lexer(input)
             const parser = new Parser()
             lexer.run()
-            console.log(JSON.stringify(lexer.tokens))
-            console.log(lexer.tokens.map(a => a.raw).join(''))
+            // console.log(JSON.stringify(lexer.tokens))
+            // console.log(lexer.tokens.map(a => a.raw).join(''))
             console.log(lexer.tokens.map(a => {
                 return {
                     name: a.name,

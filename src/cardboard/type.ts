@@ -1,32 +1,38 @@
 import { Node } from "./parser_scheme";
-export interface Header extends Node{
+export interface HeaderNode extends Node{
     header:Node;
     children:(Node)[]
 }
-export interface LexerDeclaration extends Node{
-    bind?:Node;
+export interface LexerDeclarationNode extends Node{
+    decorator?:Node;
     keyword:Node;
     name:Node;
     children:(Node)[]
 }
-export interface Expression extends Node{
+export interface ExpressionNode extends Node{
     name:Node;
     action?:Node;
-    children:(Group|Wrapper|Node|Node)[]
+    children:(GroupNode|WrapperNode|Node)[]
 }
-export interface IfStatement extends Node{
+export interface IfStatementNode extends Node{
+    condition:Node;
     stop?:Node;
-    children:(Node|Expression|IfStatement|Node)[]
+    children:(ExpressionNode|IfStatementNode|Node)[]
 }
-export interface Group extends Node{
+export interface GroupNode extends Node{
     mode:Node;
-    children:(Expression|Node|Node)[]
+    children:(ExpressionNode|Node)[]
 }
-export interface Wrapper extends Node{
+export interface WrapperNode extends Node{
     mode:Node;
-    children:(Expression|Node|Node)[]
+    children:(ExpressionNode|Node)[]
 }
-export interface Box extends Node{
-    header:Header;
-    children:(LexerDeclaration|Node|Node)[]
+export interface BoxNode extends Node{
+    header:HeaderNode;
+    children:(LexerDeclarationNode|Node)[]
+}
+export interface LexerDecoratorNode extends Node{
+    bind?:Node;
+    merge?:Node;
+    children:(Node)[]
 }

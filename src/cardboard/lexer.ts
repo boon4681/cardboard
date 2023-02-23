@@ -6,8 +6,8 @@ export class Lexer extends LexerBase {
     constructor(source: Input) {
         const lexer = new Wrapper('lexer')
         const lexer_block = new Wrapper('lexer.block')
-        const hidden = new Reader('hidden', /[\s\r\n]*/).set({ mode: 'normal', ignore: true, fragment: false, nullable: false })
-        const Hidden = new Reader('hidden', /[\s\r\n]+/).set({ mode: 'normal', ignore: true, fragment: false, nullable: false })
+        const hidden = new Reader('whitespace', /[\s\r\n]*/).set({ mode: 'normal', ignore: true, fragment: false, nullable: false })
+        const Hidden = new Reader('whitespace', /[\s\r\n]+/).set({ mode: 'normal', ignore: true, fragment: false, nullable: false })
         const identifier = new Reader('identifier', /[_\w][_\w\d]*/)
         const expr = new Wrapper('expr')
         const expr_value = new Group('expr.value')
@@ -18,15 +18,16 @@ export class Lexer extends LexerBase {
         const group_children = new Wrapper('group.children')
         const wrapper = new Wrapper('wrapper')
         const wrapper_children = new Wrapper('wrapper.children')
+        const decorator = new Wrapper('decorator')
 
         wrapper.add([
             new Reader('wrapper.children.open', /\[/).set({ mode: 'push', ignore: false, nullable: false, tokenizer: wrapper_children }),
-            new Reader('wrapper.mode',/[\*\+\?]/).set({ mode: 'normal', ignore: false, fragment: false, nullable: true })
+            new Reader('wrapper.mode', /[\*\+\?]/).set({ mode: 'normal', ignore: false, fragment: false, nullable: true })
         ])
 
         group.add([
             new Reader('group.children.open', /\(/).set({ mode: 'push', ignore: false, nullable: false, tokenizer: group_children }),
-            new Reader('group.mode',/[\*\+\?]/).set({ mode: 'normal', ignore: false, fragment: false, nullable: true })
+            new Reader('group.mode', /[\*\+\?]/).set({ mode: 'normal', ignore: false, fragment: false, nullable: true })
         ])
 
         wrapper_children.add([
@@ -53,8 +54,8 @@ export class Lexer extends LexerBase {
             new Reader('content', /[^\r\n]*/)
         ])
 
-        lexer.add([
-            new IFWrapper('lexer.bind', new Reader('lexer.bind', /\@bind/)).add([
+        decorator.add([
+            new Wrapper('bind').add([
                 new Reader('lexer.bind', /\@bind/),
                 hidden,
                 new Reader('lexer.bind.punctuation.open', /\(/),
@@ -62,8 +63,15 @@ export class Lexer extends LexerBase {
                 new Reader('lexer.bind.name', /([\w][_\w\d]*)\:([\w][_\w\d]*)|([\w][_\w\d]*)/),
                 hidden,
                 new Reader('lexer.bind.punctuation.close', /\)/),
-                hidden
+                Hidden
             ]),
+            new Wrapper('merge').add([
+                new Reader('lexer.merge', /\@merge/),
+                Hidden
+            ]),
+        ])
+
+        lexer.add([
             new Reader('lexer.keyword', /lexer/),
             Hidden,
             identifier.fragment('lexer.name'),
@@ -77,6 +85,7 @@ export class Lexer extends LexerBase {
                 expr,
                 Hidden,
                 if_stats,
+                decorator,
                 group,
                 wrapper
             ]).set({ mode: 'normal', ignore: false, fragment: false, nullable: true }),
@@ -187,9 +196,15 @@ export class Lexer extends LexerBase {
         header.merging = true
 
         const scheme = [
+            // new Group('bug').add([
+            //     header,
+            //     lexer,
+            //     Hidden
+            // ])
             header,
             lexer,
-            Hidden
+            decorator,
+            Hidden,
         ]
         super(source, scheme)
     }

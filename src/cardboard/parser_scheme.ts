@@ -169,14 +169,14 @@ interface TokenNode extends Node {
 
 interface GroupNode extends Node {
     index: number
-    action: GroupAction
+    action: ActionMode
     ended: boolean
     status: Status
 }
 
 interface WrapperNode extends Node {
     index: number
-    action: GroupAction
+    action: ActionMode
     ended: boolean
     status: Status
 }
@@ -186,9 +186,9 @@ interface RootNode extends Node {
     nullable: boolean
 }
 
-type GroupAction = 'once' | 'repeat' | 'null or repeat' | 'null or once'
+export type ActionMode = 'once' | 'repeat' | 'null or repeat' | 'null or once'
 
-const groupActionMapper: { [k: string]: GroupAction } = {
+export const ActionModeMapper: { [k: string]: ActionMode } = {
     '': 'once',
     '?': 'null or once',
     '+': 'repeat',
@@ -230,7 +230,7 @@ class parser_grammar_parser {
             else if (token.name == 'group.children.close') {
                 if (node.type == 'group') {
                     const pop = nodes.pop() as GroupNode
-                    pop.action = groupActionMapper[token.raw.slice(1)]
+                    pop.action = ActionModeMapper[token.raw.slice(1)]
                     nodes[nodes.length - 1].children.push(pop)
                     node = nodes[nodes.length - 1]
                 } else if (node.type == 'root') {
@@ -242,7 +242,7 @@ class parser_grammar_parser {
             else if (token.name == 'wrapper.children.close') {
                 if (node.type == 'wrapper') {
                     const pop = nodes.pop() as WrapperNode
-                    pop.action = groupActionMapper[token.raw.slice(1)]
+                    pop.action = ActionModeMapper[token.raw.slice(1)]
                     nodes[nodes.length - 1].children.push(pop)
                     node = nodes[nodes.length - 1]
                 } else if (node.type == 'root') {
@@ -309,7 +309,7 @@ class tsBuilder implements Visitor {
     constructor(
         public name: string
     ) {
-        this.ts = `interface ${name} extends Node`
+        this.ts = `interface ${name + 'Node'} extends Node`
     }
     stack = 0
     visitRoot(node: RootNode) {
@@ -324,7 +324,6 @@ class tsBuilder implements Visitor {
     visitWrapper(node: WrapperNode) {
         this.stack += 1
         let wrapper = ''
-        let space = '\n' + new Array(this.stack).fill('    ').join('')
         if (node.attr) {
             if (node.attr != 'children') {
                 wrapper += node.attr + ((node.action == 'null or once' || node.action == 'null or repeat') ? '?' : '') + ':Node'
@@ -336,7 +335,6 @@ class tsBuilder implements Visitor {
                 node.acceptChildren(this)
                     .map(a => a.split(':')).map(a => a[0].slice(0, 1).search(/[a-z]/) == -1 ? a[0] : a[1])
                     .filter(a => a != 'Node')
-                    .concat('Node')
             )).join('|')
             wrapper += ')[]'
         }
@@ -346,7 +344,6 @@ class tsBuilder implements Visitor {
     visitGroup(node: GroupNode) {
         this.stack += 1
         let group = ''
-        let space = '\n' + new Array(this.stack).fill('    ').join('')
         if (node.attr) {
             if (node.attr != 'children') {
                 group += node.attr + ((node.action == 'null or once' || node.action == 'null or repeat') ? '?' : '') + ':Node'
@@ -354,8 +351,8 @@ class tsBuilder implements Visitor {
             }
         } else {
             group += Array.from(new Set(node.acceptChildren(this)
-                .map(a => a.split(':')).map(a => a[0].slice(0, 1).search(/[a-z]/) == -1 ? a[0] : a[1])
-                .filter(a => a != 'Node').concat('Node')))
+                .map(a => a.split(':')).map(a => a[0].slice(0, 1).search(/[a-z]/) == -1 ? a[0] : undefined)
+                .filter(a => a != 'Node')))
                 .join('|')
         }
         this.stack -= 1
@@ -375,14 +372,14 @@ class tsBuilder implements Visitor {
             }
             if (node.action.value?.startsWith('#')) {
                 if (node.name.includes('.')) {
-                    return node.name.split('.').map(a => a.slice(0, 1).toUpperCase() + a.slice(1)).join('') + ':' + node.action.value.slice(1)
+                    return node.name.split('.').map(a => a.slice(0, 1).toUpperCase() + a.slice(1)).join('') + ':' + node.action.value.slice(1) + 'Node'
                 } else {
-                    return node.name + ':' + node.action.value.slice(1)
+                    return node.name + ':' + node.action.value.slice(1) + 'Node'
                 }
             }
         }
         if (node.action.value?.startsWith('#')) {
-            return node.action.value.slice(1)
+            return node.action.value.slice(1) + 'Node'
         }
     }
 }
@@ -405,14 +402,14 @@ class SchemeVisitor implements Visitor {
             const result = child.accept(this);
             if (!result) {
                 if (child.type == 'token') {
-                    if (i > 1) {
+                    if (i >= 1) {
                         const token = this.lexer.get()
                         throw new Error(`Unexpected Token: expecting "${(child as TokenNode).name}" not "${token.name}"\n at ${this.stack.map(a => a.type).join(' > ')}`)
                     } else {
                         this.stack.pop()
                         return undefined
                     }
-                } else if (!(['null or once', 'null or repeat'] as GroupAction[]).includes((child as any).action)) {
+                } else if (!(['null or once', 'null or repeat'] as ActionMode[]).includes((child as any).action)) {
                     throw new Error(`${child} ${this.stack.map(a => a.type).join(' > ')}`)
                 }
             }
@@ -427,7 +424,7 @@ class SchemeVisitor implements Visitor {
             const child = node.children[i];
             const result = child.accept(this);
             if (!result) {
-                if (!(['null or once', 'null or repeat'] as GroupAction[]).includes(node.action) || i > 0) {
+                if (!(['null or once', 'null or repeat'] as ActionMode[]).includes(node.action) || i > 0) {
                     if (child.type == 'token') {
                         const token = this.lexer.get()
                         throw new Error(`Unexpected Token: expecting "${(child as TokenNode).name}" not "${token.name}"\n at ${this.stack.map(a => a.type).join(' > ')}`)
@@ -465,10 +462,10 @@ class SchemeVisitor implements Visitor {
                 break
             }
         }
-        if (!group_result && !(['null or once', 'null or repeat'] as GroupAction[]).includes(node.action)) {
+        if (!group_result && !(['null or once', 'null or repeat'] as ActionMode[]).includes(node.action)) {
             throw new Error(`Cannot read ${node.type} ${this.lexer.get().value}`)
         }
-        if (group_result && (['repeat', 'null or repeat'] as GroupAction[]).includes(node.action)) {
+        if (group_result && (['repeat', 'null or repeat'] as ActionMode[]).includes(node.action)) {
             while (group_result && this.lexer.index < this.lexer.tokens.length) {
                 for (let i = 0; i < node.children.length; i++) {
                     const child = node.children[i];
@@ -498,6 +495,9 @@ class SchemeVisitor implements Visitor {
     visitToken(node: TokenNode): Node | undefined {
         const token = this.lexer.get()
         const action = node.action
+        if(!token){
+            throw new Error(`No viable token to read.`)
+        }
         if (node.name.startsWith('!')) {
             if (token.name.startsWith(node.name.slice(1))) {
                 if (action.value?.startsWith('#')) {
@@ -536,7 +536,7 @@ class SchemeVisitor implements Visitor {
             if (action.value == 'normal') {
                 const node = new Node(token.name);
                 node.value = token.value
-                // node.span = token.span;
+                node.span = token.span;
                 this.stack[this.stack.length - 1].children.push(node)
                 return node
             }
@@ -546,7 +546,7 @@ class SchemeVisitor implements Visitor {
             else if (action.value?.startsWith('$')) {
                 const node = new Node(action.value.slice(1));
                 node.value = token.value;
-                // node.span = token.span;
+                node.span = token.span;
                 (this.stack[this.stack.length - 1] as any)[action.value.slice(1)] = node
                 return node
             }
