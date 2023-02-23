@@ -1,6 +1,6 @@
 import { writeFileSync } from "fs"
 import path from "path"
-import { Group, GroupSerial, IFWrapper, is_pack, Pack, Reader, Tokenizer, Wrapper, WrapperSerial } from "pulpboard"
+import { Group, GroupSerial, IFWrapper, Input, is_pack, LexerBase, Pack, Reader, Tokenizer, Wrapper, WrapperSerial } from "pulpboard"
 import { Lexer } from "./lexer"
 import { ActionModeMapper, Node, ParserScheme, Visitor } from "./parser_scheme"
 import { BoxNode, ExpressionNode, GroupNode, HeaderNode, IfStatementNode, LexerDeclarationNode, WrapperNode } from "./type"
@@ -11,23 +11,18 @@ header
 `
 )
 
-const lexer_decorator_scheme = new ParserScheme('LexerDecorator', `
-@bind[
-    lexer.bind -> ignore
-    lexer.bind.punctuation.open -> ignore
-    lexer.bind.name
-    lexer.bind.punctuation.close -> ignore
-]?
-@merge[
-    lexer.merge
-]?
-`)
-
 const lexer_scheme = new ParserScheme('LexerDeclaration',
     `
 @decorator(
-    !lexer.bind -> #LexerDecorator
-    !lexer.merge -> #LexerDecorator
+    @bind[
+        lexer.bind -> ignore
+        lexer.bind.punctuation.open -> ignore
+        lexer.bind.name
+        lexer.bind.punctuation.close -> ignore
+    ]?
+    @merge[
+        lexer.merge
+    ]?
 )*
 lexer.keyword -> $keyword
 lexer.name -> $name
@@ -61,7 +56,7 @@ expr.assignment -> ignore
     identifier -> $name
     @argument[
         expr.options.option.punctuation.open -> ignore
-        identifier
+        identifier -> $argument
         expr.options.option.punctuation.close -> ignore
     ]?
 ]?
@@ -73,9 +68,7 @@ const if_scheme = new ParserScheme('IfStatement',
     `
 if.keyword -> ignore
 if.condition.open -> ignore
-@condition(
-    strings
-)
+strings -> $condition
 if.condition.close -> ignore
 if.block.open -> ignore
 (
@@ -100,6 +93,7 @@ group.children.close -> ignore
 ?group.mode -> $mode
 `
 )
+
 const wrapper_scheme = new ParserScheme('Wrapper',
     `
 wrapper.children.open -> ignore
@@ -143,10 +137,13 @@ class TreeVisitor implements Visitor {
     global: { [k: string]: Tokenizer<string, any> } = {}
     local: { [k: string]: Tokenizer<string, any> }[] = []
     stack: Tokenizer<string, any>[] = []
+    private pointer = 0
 
     visitBox(node: BoxNode) {
         // console.log(node.acceptChildren(this))
-        return node.acceptChildren(this)
+        const children = node.acceptChildren(this)
+        // console.log((children as any)[0].children[0].children[0])
+        return children
     }
     visitHeader(node: HeaderNode) {
 
@@ -159,22 +156,45 @@ class TreeVisitor implements Visitor {
         }
         this.stack.push(lexer)
         this.local.push({})
+        this.pointer++
         lexer.add(node.acceptChildren(this))
-        if (node.decorator) {
-        }
         if (this.stack.length == 1) {
             this.global[name] = lexer
-            this.local.pop()
-            return this.stack.pop()
+            this.pointer--
+            if (node.decorator) {
+                if (node.decorator.merge) {
+                    lexer.merging = true
+                }
+                if (node.decorator.bind) {
+                    return this.stack.pop()
+                }
+            }
+            this.stack.pop()
         } else {
-            this.local.pop()
-            this.local[this.local.length - 1][name] = lexer
+            this.pointer--
+            this.local[this.pointer][name] = lexer
             this.stack.pop()
         }
     }
     visitExpression(node: ExpressionNode) {
         const expr = new Wrapper(node.name.value!)
         expr.add(node.acceptChildren(this))
+        expr.merging = true
+        if (node.action) {
+            switch (node.action.name.value) {
+                case 'pop':
+                    if (node.action.argument?.value) {
+                        throw new Error(`HI`)
+                    }
+                    expr.last_child!.set({ mode: 'pop', ignore: false, nullable: false })
+                    break
+                case 'push':
+                    expr.last_child!.set({ mode: 'push', ignore: false, nullable: false, tokenizer: this.local[this.pointer][node.action.argument!.argument!.value!] })
+                    break
+                default:
+                    throw new Error(`Unknown action: ${node.action.name.value}`)
+            }
+        }
         return expr
     }
     visitStrings(node: Node) {
@@ -182,9 +202,7 @@ class TreeVisitor implements Visitor {
         try {
             return new Reader(
                 this.name([parent.children.length.toString()], true),
-                new RegExp(node.value?.slice(1, -1)
-                    .replace(/[|\\{}()[\]^$+*?.]/g, '\\$&')
-                    .replace(/-/g, '\\x2d') || '')
+                new RegExp(node.value?.slice(1, -1)!)
             )
         } catch (error: any) {
             throw new Error(error.message + '\n')
@@ -193,6 +211,9 @@ class TreeVisitor implements Visitor {
     visitIfStatement(node: IfStatementNode) {
         const parent = this.stack[this.stack.length - 1] as Pack
         const if_statement = new IFWrapper(this.name(['if', parent.children.length.toString()], true), this.visitStrings(node.condition))
+        if (node.stop) {
+            if_statement.stop_reading = true
+        }
         this.stack.push(if_statement)
         if_statement.add(node.acceptChildren(this))
         return this.stack.pop()
@@ -260,13 +281,18 @@ const scheme = {
     'IfStatement': if_scheme,
     'Group': group_scheme,
     'Wrapper': wrapper_scheme,
-    'LexerDecorator': lexer_decorator_scheme
 }
 
 writeFileSync(path.join(__dirname, 'type.ts'), 'import { Node } from "./parser_scheme";\n' + [
     header_scheme, lexer_scheme, expr_scheme, if_scheme, group_scheme, wrapper_scheme, box_scheme,
-    lexer_decorator_scheme
 ].map(key => 'export ' + key.ts).join('\n'))
+
+export class TestLexer extends LexerBase {
+    constructor() {
+        super(new Input('', ''), [])
+    }
+    disable_debugger: boolean = true;
+}
 
 export class Parser {
     constructor() { }
@@ -275,8 +301,8 @@ export class Parser {
         const visitor = new TreeVisitor(lexer)
         const node = box_scheme.eat(lexer, scheme)
         // console.log(JSON.stringify(node))
-        console.log(
-            node.accept(visitor)
-        )
+        const cardboard = new TestLexer()
+        cardboard.scheme = node.accept(visitor)
+        return cardboard
     }
 }

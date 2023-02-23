@@ -47,11 +47,23 @@ keywords cannot be used as identifiers:
 
 used as lexer name and token name
 
+Example:
+
+```ts
+hello
+```
+
 #### Cardboard meta
 
 > **syntax in regex:**
 >
 > `\@(?:[_\w][_\w\d]*)(?:\.(?:[_\w][_\w\d]*))*`
+
+Example:
+
+```ts
+@registries.block
+```
 
 #### Strings
 
@@ -62,6 +74,14 @@ used as lexer name and token name
 > **double qouted string syntax:**
 >
 > `"` `.*` `"`
+
+Example:
+
+```ts
+"hi this is cardboard"
+
+'cardboard built with pulpboard'
+```
 
 #### Token
 

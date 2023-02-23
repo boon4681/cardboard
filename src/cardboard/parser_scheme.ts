@@ -305,68 +305,81 @@ class parser_grammar_parser {
 export interface Visitor { }
 
 class tsBuilder implements Visitor {
-    ts: string = ``
+    ts_stack: { [k: string]: string } = {}
+    stack: Node[] = []
     constructor(
         public name: string
     ) {
-        this.ts = `interface ${name + 'Node'} extends Node`
+        this.ts_stack[name] = `interface ${name + 'Node'} extends Node`
     }
-    stack = 0
     visitRoot(node: RootNode) {
-        this.ts += '{'
+        this.ts_stack[this.name] += ' {\n    '
         const children = node.acceptChildren(this)
-        this.ts += Array.from(new Set(children.filter(a => a.search(':') > -1))).concat(
-            'children:(' + Array.from(new Set(children.filter(a => a.search(':') == -1).concat('Node'))).join('|') + ')[]'
-        ).map(a => '\n    ' + a).join(';')
-        this.ts += '\n}'
-        return this.ts
+        this.ts_stack[this.name] += Array.from(
+            new Set(
+                children.filter(a => typeof a == 'string').concat(
+                    'children:Node[]'
+                )
+            )
+        ).join(';\n    ')
+        this.ts_stack[this.name] += '\n}'
+        return Object.keys(this.ts_stack).map(a => this.ts_stack[a]).join('\n')
     }
     visitWrapper(node: WrapperNode) {
-        this.stack += 1
-        let wrapper = ''
         if (node.attr) {
+            this.ts_stack[node.attr] = `interface ${node.attr.split('.').map(a => a.slice(0, 1).toUpperCase() + a.slice(1)).join('') + 'Node'} extends Node {\n    `
+        }
+        this.stack.push(node)
+        const children = node.acceptChildren(this)
+        this.stack.pop()
+        if (node.attr) {
+            this.ts_stack[node.attr] += children.join(';\n    ') + '\n}'
             if (node.attr != 'children') {
-                wrapper += node.attr + ((node.action == 'null or once' || node.action == 'null or repeat') ? '?' : '') + ':Node'
-                node.acceptChildren(this).join('|')
+                return node.attr + ((node.action == 'null or once' || node.action == 'null or repeat') ? '?' : '') + ':' + node.attr.split('.').map(a => a.slice(0, 1).toUpperCase() + a.slice(1)).join('') + 'Node'
             }
         } else {
-            wrapper += 'children:('
-            wrapper += Array.from(new Set(
-                node.acceptChildren(this)
-                    .map(a => a.split(':')).map(a => a[0].slice(0, 1).search(/[a-z]/) == -1 ? a[0] : a[1])
-                    .filter(a => a != 'Node')
-            )).join('|')
-            wrapper += ')[]'
+            return children
         }
-        this.stack -= 1
-        return wrapper
     }
     visitGroup(node: GroupNode) {
-        this.stack += 1
-        let group = ''
         if (node.attr) {
+            this.ts_stack[node.attr] = `interface ${node.attr.split('.').map(a => a.slice(0, 1).toUpperCase() + a.slice(1)).join('') + 'Node'} extends Node {\n    `
+        }
+        this.stack.push(node)
+        const children = node.acceptChildren(this)
+        this.stack.pop()
+        if (node.attr) {
+            this.ts_stack[node.attr] += children.join(';\n    ') + '\n}'
             if (node.attr != 'children') {
-                group += node.attr + ((node.action == 'null or once' || node.action == 'null or repeat') ? '?' : '') + ':Node'
-                node.acceptChildren(this).join('|')
+                return node.attr + ((node.action == 'null or once' || node.action == 'null or repeat') ? '?' : '') + ':' + node.attr.split('.').map(a => a.slice(0, 1).toUpperCase() + a.slice(1)).join('') + 'Node'
             }
         } else {
-            group += Array.from(new Set(node.acceptChildren(this)
-                .map(a => a.split(':')).map(a => a[0].slice(0, 1).search(/[a-z]/) == -1 ? a[0] : undefined)
-                .filter(a => a != 'Node')))
-                .join('|')
+            return children
         }
-        this.stack -= 1
-        return group
     }
     visitToken(node: TokenNode) {
-        if (node.action.value != 'ignore' && !node.name.startsWith('!')) {
-            if (node.action.value == 'normal' && this.stack == 0) {
-                if (node.name.includes('.')) {
-                    return node.name.split('.').map(a => a.slice(0, 1).toUpperCase() + a.slice(1)).join('') + ':Node'
-                } else {
-                    return node.name + ':Node'
+        const parent = this.stack[this.stack.length - 1]
+        if (parent) {
+            if (node.action.value != 'ignore' && !node.name.startsWith('!')) {
+                if (node.action.value == 'normal' && !parent.attr) {
+                    if (node.name.includes('.')) {
+                        return node.name.split('.').map(a => a.slice(0, 1).toUpperCase() + a.slice(1)).join('')
+                    } else {
+                        return node.name
+                    }
+                }
+                if (node.action.value?.startsWith('$')) {
+                    return node.action.value.slice(1) + ':Node'
+                }
+                if (node.action.value?.startsWith('#')) {
+                    if (node.name.includes('.')) {
+                        return node.name.split('.').map(a => a.slice(0, 1).toUpperCase() + a.slice(1)).join('') + ':' + node.action.value.slice(1) + 'Node'
+                    } else {
+                        return node.name + ':' + node.action.value.slice(1) + 'Node'
+                    }
                 }
             }
+        } else {
             if (node.action.value?.startsWith('$')) {
                 return node.action.value.slice(1) + ':Node'
             }
@@ -377,9 +390,6 @@ class tsBuilder implements Visitor {
                     return node.name + ':' + node.action.value.slice(1) + 'Node'
                 }
             }
-        }
-        if (node.action.value?.startsWith('#')) {
-            return node.action.value.slice(1) + 'Node'
         }
     }
 }
@@ -495,7 +505,7 @@ class SchemeVisitor implements Visitor {
     visitToken(node: TokenNode): Node | undefined {
         const token = this.lexer.get()
         const action = node.action
-        if(!token){
+        if (!token) {
             throw new Error(`No viable token to read.`)
         }
         if (node.name.startsWith('!')) {

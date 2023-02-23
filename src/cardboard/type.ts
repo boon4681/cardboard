@@ -1,38 +1,55 @@
 import { Node } from "./parser_scheme";
-export interface HeaderNode extends Node{
-    header:Node;
-    children:(Node)[]
+export interface HeaderNode extends Node {
+    children:Node[]
 }
-export interface LexerDeclarationNode extends Node{
-    decorator?:Node;
+export interface LexerDeclarationNode extends Node {
+    decorator?:DecoratorNode;
     keyword:Node;
     name:Node;
-    children:(Node)[]
+    children:Node[]
 }
-export interface ExpressionNode extends Node{
+interface DecoratorNode extends Node {
+    bind?:BindNode;
+    merge?:MergeNode
+}
+interface BindNode extends Node {
+    
+}
+interface MergeNode extends Node {
+    
+}
+interface ChildrenNode extends Node {
+    
+}
+export interface ExpressionNode extends Node {
     name:Node;
-    action?:Node;
-    children:(GroupNode|WrapperNode|Node)[]
+    action?:ActionNode;
+    children:Node[]
 }
-export interface IfStatementNode extends Node{
+interface ActionNode extends Node {
+    name:Node;
+    argument?:ArgumentNode
+}
+interface ArgumentNode extends Node {
+    argument:Node
+}
+export interface IfStatementNode extends Node {
     condition:Node;
-    stop?:Node;
-    children:(ExpressionNode|IfStatementNode|Node)[]
+    stop?:StopNode;
+    children:Node[]
 }
-export interface GroupNode extends Node{
+interface StopNode extends Node {
+    
+}
+export interface GroupNode extends Node {
     mode:Node;
-    children:(ExpressionNode|Node)[]
+    children:Node[]
 }
-export interface WrapperNode extends Node{
+export interface WrapperNode extends Node {
     mode:Node;
-    children:(ExpressionNode|Node)[]
+    children:Node[]
 }
-export interface BoxNode extends Node{
+export interface BoxNode extends Node {
     header:HeaderNode;
-    children:(LexerDeclarationNode|Node)[]
-}
-export interface LexerDecoratorNode extends Node{
-    bind?:Node;
-    merge?:Node;
-    children:(Node)[]
+    children:Node[]
 }
