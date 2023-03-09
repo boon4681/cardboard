@@ -10,7 +10,7 @@ export const versions_validator = async (version: string) => {
     if (cached == version) {
         return true
     }
-    const versions: { game: [{ version: string }] } = await fetch(versions_url).then(a => a.json());
+    const versions: { game: [{ version: string }] } = await fetch(versions_url).then(a => a.json()) as any;
     const check = versions['game'].map(a => a['version']).includes(version)
     cached = version
     return check

@@ -18,7 +18,7 @@ export class Lexer extends LexerBase {
         const group_children = new Wrapper('group.children')
         const wrapper = new Wrapper('wrapper')
         const wrapper_children = new Wrapper('wrapper.children')
-        const decorator = new Wrapper('decorator')
+        const decorator = new Group('decorator')
 
         wrapper.add([
             new Reader('wrapper.children.open', /\[/).set({ mode: 'push', ignore: false, nullable: false, tokenizer: wrapper_children }),
@@ -172,7 +172,9 @@ export class Lexer extends LexerBase {
                         new Reader("text", /[^\\\'\n\r]+/).set({ mode: 'normal', ignore: false, fragment: false, nullable: true }),
                         new Reader("escape", /\\[tbrn\"\'\\]/).set({ mode: 'normal', ignore: false, fragment: false, nullable: true }),
                     ]).set({ mode: 'normal', ignore: false, fragment: false, nullable: true }),
-                    new Reader('strings.qouted.close', /\'/).set({ mode: 'pop', ignore: false, nullable: false }),
+                    new Wrapper('test').add([
+                        new Reader('strings.qouted.close', /\'/).set({ mode: 'pop', ignore: false, nullable: false })
+                    ]),
                 ]),
             })
         ])
@@ -187,7 +189,7 @@ export class Lexer extends LexerBase {
                         new Reader("text", /[^\\\"\r\n]+/).set({ mode: 'normal', ignore: false, fragment: false, nullable: true }),
                         new Reader("escape", /\\[tbrn\"\'\\]/).set({ mode: 'normal', ignore: false, fragment: false, nullable: true }),
                     ]).set({ mode: 'normal', ignore: false, fragment: false, nullable: true }),
-                    new Reader('strings.double_qouted.close', /\"/).set({ mode: 'pop', ignore: false, nullable: false }),
+                    new Reader('strings.double_qouted.close', /\"/).set({ mode: 'pop', ignore: false, nullable: false })
                 ]),
             })
         ])

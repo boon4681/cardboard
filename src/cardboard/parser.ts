@@ -134,9 +134,9 @@ class TreeVisitor implements Visitor {
         return name.join('.')
     }
 
-    global: { [k: string]: Tokenizer<string, any> } = {}
-    local: { [k: string]: Tokenizer<string, any> }[] = []
-    stack: Tokenizer<string, any>[] = []
+    global: { [k: string]: Tokenizer } = {}
+    local: { [k: string]: Tokenizer }[] = []
+    stack: Tokenizer[] = []
     private pointer = 0
 
     visitBox(node: BoxNode) {
@@ -186,10 +186,10 @@ class TreeVisitor implements Visitor {
                     if (node.action.argument?.value) {
                         throw new Error(`HI`)
                     }
-                    expr.last_child!.set({ mode: 'pop', ignore: false, nullable: false })
+                    expr.set({ mode: 'pop', ignore: false, nullable: false })
                     break
                 case 'push':
-                    expr.last_child!.set({ mode: 'push', ignore: false, nullable: false, tokenizer: this.local[this.pointer][node.action.argument!.argument!.value!] })
+                    expr.set({ mode: 'push', ignore: false, nullable: false, tokenizer: this.local[this.pointer][node.action.argument!.argument!.value!] })
                     break
                 default:
                     throw new Error(`Unknown action: ${node.action.name.value}`)
@@ -212,7 +212,7 @@ class TreeVisitor implements Visitor {
         const parent = this.stack[this.stack.length - 1] as Pack
         const if_statement = new IFWrapper(this.name(['if', parent.children.length.toString()], true), this.visitStrings(node.condition))
         if (node.stop) {
-            if_statement.stop_reading = true
+            if_statement.stop(true)
         }
         this.stack.push(if_statement)
         if_statement.add(node.acceptChildren(this))
@@ -283,9 +283,9 @@ const scheme = {
     'Wrapper': wrapper_scheme,
 }
 
-writeFileSync(path.join(__dirname, 'type.ts'), 'import { Node } from "./parser_scheme";\n' + [
-    header_scheme, lexer_scheme, expr_scheme, if_scheme, group_scheme, wrapper_scheme, box_scheme,
-].map(key => 'export ' + key.ts).join('\n'))
+// writeFileSync(path.join(__dirname, 'type.ts'), 'import { Node } from "./parser_scheme";\n' + [
+//     header_scheme, lexer_scheme, expr_scheme, if_scheme, group_scheme, wrapper_scheme, box_scheme,
+// ].map(key => 'export ' + key.ts).join('\n'))
 
 export class TestLexer extends LexerBase {
     constructor() {

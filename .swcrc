@@ -4,7 +4,7 @@
         "syntax": "typescript",
         "tsx": false
       },
-      "target": "es2015",
+      "target": "ES6",
       "loose": false,
       "minify": {
         "compress": false,
@@ -19,7 +19,11 @@
       }
     },
     "module": {
-      "type": "commonjs"
+      "type": "ES6",
+      "strict": false,
+      "strictMode": true,
+      "lazy": false,
+      "noInterop": false
     },
     "minify": false,
     "isModule": true

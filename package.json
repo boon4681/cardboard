@@ -1,19 +1,22 @@
 {
   "name": "@mcb/cardboard",
   "version": "1.0.0",
-  "main": "index.js",
   "license": "MIT",
+  "description": "lexer for cardboard and mcb",
+  "author": "boon4681",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
     "dev": "node -r @swc-node/register ./src/main.ts",
     "start": "node ./dist/main.js",
     "debug": "node --inspect-brk -r @swc-node/register ./src/main.ts",
-    "build": "npx swc src -d dist"
+    "build": "tsc -d -w"
   },
   "dependencies": {
     "@types/node": "^18.7.13",
     "@types/node-fetch": "^2.6.2",
     "chalk": "4.1.2",
-    "node-fetch": "2.6.2",
+    "node-fetch": "^3.3.0",
     "ora": "^6.1.2",
     "prompts": "^2.4.2"
   },

@@ -230,7 +230,7 @@ class parser_grammar_parser {
             else if (token.name == 'group.children.close') {
                 if (node.type == 'group') {
                     const pop = nodes.pop() as GroupNode
-                    pop.action = ActionModeMapper[token.raw.slice(1)]
+                    pop.action = ActionModeMapper[token.value.slice(1)]
                     nodes[nodes.length - 1].children.push(pop)
                     node = nodes[nodes.length - 1]
                 } else if (node.type == 'root') {
@@ -242,7 +242,7 @@ class parser_grammar_parser {
             else if (token.name == 'wrapper.children.close') {
                 if (node.type == 'wrapper') {
                     const pop = nodes.pop() as WrapperNode
-                    pop.action = ActionModeMapper[token.raw.slice(1)]
+                    pop.action = ActionModeMapper[token.value.slice(1)]
                     nodes[nodes.length - 1].children.push(pop)
                     node = nodes[nodes.length - 1]
                 } else if (node.type == 'root') {
@@ -591,8 +591,8 @@ export class ParserScheme {
         public name: string,
         scheme: string
     ) {
-        const lexer = new parser_grammar_lexer(new Input('cardboard.parser_scheme_dummy', scheme))
-        lexer.run()
+        const lexer = new parser_grammar_lexer(new Input('cardboard.parser_scheme_dummy.' + this.name, scheme))
+        lexer.read()
         // console.log(lexer.tokens.map(a => { return { name: a.name, value: a.value } }))
         const parser = new parser_grammar_parser(lexer)
         this.ast = parser.ast

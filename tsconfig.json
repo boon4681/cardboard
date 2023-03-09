@@ -11,10 +11,13 @@
         "strict": true,
         "skipLibCheck": true,
         "allowSyntheticDefaultImports": true,
-        "resolveJsonModule":true,
+        "resolveJsonModule": true,
         "paths": {
-            "pulpboard/*":["./node_modules/pulpboard/*"],
-        }
+            "pulpboard/*": [
+                "./node_modules/pulpboard/*"
+            ],
+        },
+        "outDir": "./dist",
     },
     "include": [
         "./src",
